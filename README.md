@@ -1,5 +1,7 @@
 ## Node
 
+[![buddy pipeline](https://buddy.enecuum.com/enecuum/node/pipelines/pipeline/19/badge.svg?token=c35be458f2d393a30001acf59f086401a00713eb057ab070050e9855280788bf "buddy pipeline")](https://buddy.enecuum.com/enecuum/node/pipelines/pipeline/19)
+
 P2P node for the main network protocol.
 
 ## Build and Install
@@ -14,7 +16,7 @@ P2P node for the main network protocol.
 
 `sudo nano ~/.profile` and append `export PATH=$PATH:$HOME/.local/bin` at the end.
 
-### Install RockDB for the Legder
+### Install RocksDB
 
 `sudo apt install librocksdb-dev`
 
@@ -30,8 +32,23 @@ P2P node for the main network protocol.
 
 2. Build & install
 
-`stack install`
+`stack build --fast`
+
+3. Run tests (optional) 
+
+Run all tests:
+`stack build --fast --test`
+
+Run fast tests:
+`stack build --fast --test --test-arguments "-m Fast"`
+
+Run slow and unreliable tests:
+`stack build --fast --test --test-arguments "-m Slow"`
 
 ### Initialize
 
+If you added path to your profile:
 `enq-node-haskell initialize ./configs/Client.json`
+
+Or you need to use that instead:
+`stack exec enq-node-haskell initialize ./configs/Client.json`

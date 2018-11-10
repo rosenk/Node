@@ -1,16 +1,25 @@
 {
-	"bootNodeAddress": "[((127,0,0,1), 1554)]",
-	"scenarioNode": [{
-		"nodeRole": "GraphNode",
-		"scenario": "Full",
-		"scenarioRole": "Transmitter"
-	}],
-	"extPort": 1668,
-  "loggerConfig":
+   "node":"GraphNode",
+   "nodeScenario":"Transmitter",
+   "nodeConfig":
+   {
+      "tag":"GraphNodeConfig",
+      "useDatabase":true,
+      "dbModelName":"graph_node_transmitter.dbm",
+      "useEnqHomeDir":true,
+      "stopOnDatabaseError":true,
+      "dbOptions":
       {
-          "format": "$prio $loggername: $msg",
-          "level": "Debug",
-          "logFilePath": "/tmp/log/GraphNode.log",
-          "logToConsole": true
+          "createIfMissing":true,
+          "errorIfExists":false
       }
+   },
+   "loggerConfig":
+   {
+      "logFilePath": "/tmp/log/GraphNodeTransmitter.log",
+      "format":"$prio $loggername: $msg",
+      "logToConsole":true,
+			"logToFile": true,
+      "level":"Debug"
+   }
 }
