@@ -1,0 +1,20 @@
+{
+   "node":"TstGenPoWNode",
+   "nodeScenario":"PoW",
+   "nodeConfig":
+   {
+        "defaultBlocksDelay":1000000,
+        "tag": "TstGenPoWNodeConfig",
+        "kblocksOrder": "InOrder",
+        "genPowGraphNodeUDPAddress": {"host":"127.0.0.1","port":4050},
+        "controlRpcPort": 6300
+   },
+   "loggerConfig":
+        {
+        "logFilePath": "/tmp/log/tst_gen_pow.log",
+        "format":"$prio $loggername: $msg",
+        "logToConsole":true,
+        "logToFile": true,
+        "level":"Debug"
+        }
+}

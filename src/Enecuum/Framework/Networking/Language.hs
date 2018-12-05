@@ -1,15 +1,15 @@
-{-# LANGUAGE GADTs          #-}
-{-# LANGUAGE TypeFamilies   #-}
+{-# LANGUAGE GADTs           #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies    #-}
 
 module Enecuum.Framework.Networking.Language where
 
 import           Enecuum.Prelude
 
-import qualified Data.Aeson                           as A
-import qualified Enecuum.Core.Language                as L
-import qualified Data.Text                            as Text
-import qualified Enecuum.Framework.Domain             as D
+import qualified Data.Aeson                      as A
+import qualified Data.Text                       as Text
+import qualified Enecuum.Core.Language           as L
+import qualified Enecuum.Framework.Domain        as D
 import           Language.Haskell.TH.MakeFunctor
 
 -- | Allows to work with network: open and close connections, send requests.
@@ -20,8 +20,6 @@ data NetworkingF next where
     SendTcpMsgByConnection    :: D.Connection D.Tcp -> D.RawData -> (Either D.NetworkError () -> next)-> NetworkingF next
     SendUdpMsgByConnection    :: D.Connection D.Udp -> D.RawData -> (Either D.NetworkError () -> next)-> NetworkingF next
     SendUdpMsgByAddress       :: D.Address          -> D.RawData -> (Either D.NetworkError () -> next)-> NetworkingF next
-    -- | Eval core effect.
-    EvalCoreEffectNetworkingF :: L.CoreEffect a -> (a -> next) -> NetworkingF  next
 
 makeFunctorInstance ''NetworkingF
 
@@ -53,18 +51,8 @@ instance SendUdp NetworkingL where
 class SendUdp m where
     notify :: (Typeable a, ToJSON a) => D.Address -> a -> m (Either D.NetworkError ())
 
--- | Eval core effect.
-evalCoreEffectNetworkingF :: L.CoreEffect a -> NetworkingL a
-evalCoreEffectNetworkingF coreEffect = liftF $ EvalCoreEffectNetworkingF coreEffect id
-
-instance L.Logger NetworkingL where
-  logMessage level msg = evalCoreEffectNetworkingF $ L.logMessage level msg
-
 makeRpcRequest' :: (Typeable a, ToJSON a, FromJSON b) => D.Address -> a -> NetworkingL (Either Text b)
 makeRpcRequest' address arg = responseValidation =<< sendRpcRequest address (D.toRpcRequest arg)
-
-instance L.ControlFlow NetworkingL where
-    delay = evalCoreEffectNetworkingF . L.delay
 
 responseValidation :: (FromJSON b, Applicative f) => Either Text D.RpcResponse -> f (Either Text b)
 responseValidation res = case res of

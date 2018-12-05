@@ -1,13 +1,19 @@
-{-# LANGUAGE DeriveAnyClass         #-}
-{-# LANGUAGE DuplicateRecordFields  #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module Enecuum.Assets.Nodes.Messages where
 
-import           Enecuum.Prelude
-import qualified Enecuum.Domain                as D
 import           Data.HGraph.StringHashable
+import           Enecuum.Assets.Blockchain.Keys
+import qualified Enecuum.Domain                 as D
+import           Enecuum.Prelude
+import Enecuum.Assets.Blockchain.Keys (WalletAlias)
 
+-- | Common
 data SuccessMsg = SuccessMsg
+  deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+newtype IsDead = IsDead StringHash
   deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 -- | Network messages
@@ -19,6 +25,19 @@ data Pong = Pong
 
 data Stop = Stop
   deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+-- | Client local
+data CreateNodeId = CreateNodeId Password
+  deriving (Show, Eq, Read, Generic, ToJSON, FromJSON )
+
+data CreateWallet = CreateWallet Password
+  deriving (Show, Eq, Read, Generic, ToJSON, FromJSON )
+
+data CreateWalletWithAlias = CreateWalletWithAlias WalletAlias CreateWallet
+  deriving (Show, Eq, Read, Generic, ToJSON, FromJSON)
+
+data ShowMyWallets = ShowMyWallets
+  deriving (Show, Eq, Read, Generic, ToJSON, FromJSON)
 
 -- | client - graph node interaction
 newtype CreateTransaction = CreateTransaction D.Transaction
@@ -34,6 +53,7 @@ data WalletBalanceMsg = WalletBalanceMsg
 
 newtype GetWalletBalance = GetWalletBalance { walletId :: WalletId }
   deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
 
 -- | client - PoW interaction
 data GetKBlockPending = GetKBlockPending
@@ -78,8 +98,10 @@ newtype GetMBlocksForKBlockRequest = GetMBlocksForKBlockRequest { kblock :: Stri
 newtype GetMBlocksForKBlockResponse = GetMBlocksForKBlockResponse { mblocks :: [D.Microblock] }
   deriving (Show, Eq, Generic, Newtype, ToJSON, FromJSON)
 
--- | Other graph node messages
+data Synchronize  = Synchronize D.Address
+  deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
+-- | Other graph node messages
 data DumpToDB = DumpToDB
   deriving (Show, Eq, Generic, ToJSON, FromJSON)
 

@@ -2,35 +2,35 @@
 
 module Enecuum.Framework.NodeDefinition.Interpreter where
 
-import Enecuum.Prelude hiding (fromJust)
-import qualified Data.Map                                  as M
-import           Data.Aeson                                as A
+import           Data.Aeson                                       as A
 import           Data.Aeson.Lens
-import qualified Data.Text as T
-import qualified "rocksdb-haskell" Database.RocksDB        as Rocks
-import qualified Network.Socket.ByteString.Lazy            as S
-import qualified Network.Socket                            as S hiding (recv)
+import qualified Data.Map                                         as M
+import qualified Data.Text                                        as T
+import qualified "rocksdb-haskell" Database.RocksDB               as Rocks
+import           Enecuum.Prelude                                  hiding (fromJust)
+import qualified Network.Socket                                   as S hiding (recv)
+import qualified Network.Socket.ByteString.Lazy                   as S
 import           System.Console.Haskeline
 import           System.Console.Haskeline.History
 
-import qualified Enecuum.Core.Interpreters                 as Impl
-import qualified Enecuum.Core.Runtime                      as Impl (getNextId)
-import qualified Enecuum.Core.RLens                        as RLens
-import qualified Enecuum.Core.Runtime                      as R
-import           Enecuum.Framework.Networking.Internal.Tcp.Server
-import           Enecuum.Framework.Node.Interpreter        (runNodeL)
-import           Enecuum.Framework.Runtime                 (NodeRuntime, DBHandle, Connections)
-import qualified Enecuum.Framework.Language                as L
-import qualified Enecuum.Framework.RLens                   as RLens
-import qualified Enecuum.Framework.Node.Interpreter        as Impl
-import qualified Enecuum.Framework.Domain.RPC              as D
-import qualified Enecuum.Framework.Domain.Networking       as D
-import qualified Enecuum.Framework.Domain.Process          as D
-import qualified Enecuum.Framework.Runtime                 as R
-import           Enecuum.Framework.Handler.Rpc.Interpreter
-import qualified Enecuum.Framework.Handler.Network.Interpreter    as Net
-import qualified Enecuum.Framework.Networking.Internal.Connection as Conn
+import qualified Enecuum.Core.Interpreters                        as Impl
+import qualified Enecuum.Core.RLens                               as RLens
+import qualified Enecuum.Core.Runtime                             as Impl (getNextId)
+import qualified Enecuum.Core.Runtime                             as R
+import qualified Enecuum.Framework.Domain.Networking              as D
+import qualified Enecuum.Framework.Domain.Process                 as D
+import qualified Enecuum.Framework.Domain.RPC                     as D
 import           Enecuum.Framework.Handler.Cmd.Interpreter        as Cmd
+import qualified Enecuum.Framework.Handler.Network.Interpreter    as Net
+import           Enecuum.Framework.Handler.Rpc.Interpreter
+import qualified Enecuum.Framework.Language                       as L
+import qualified Enecuum.Framework.Networking.Internal.Connection as Conn
+import           Enecuum.Framework.Networking.Internal.Tcp.Server
+import           Enecuum.Framework.Node.Interpreter               (runNodeL)
+import qualified Enecuum.Framework.Node.Interpreter               as Impl
+import qualified Enecuum.Framework.RLens                          as RLens
+import           Enecuum.Framework.Runtime                        (Connections, DBHandle, NodeRuntime)
+import qualified Enecuum.Framework.Runtime                        as R
 
 
 getNextId :: NodeRuntime -> IO Int
@@ -42,6 +42,15 @@ addProcess nodeRt pPtr threadId = do
     ps <- readTVarIO $ nodeRt ^. RLens.processes
     let newPs = M.insert pId threadId ps
     atomically $ writeTVar (nodeRt ^. RLens.processes) newPs
+
+popProcess :: NodeRuntime -> D.ProcessPtr a -> IO (Maybe ThreadId)
+popProcess nodeRt pPtr = do
+    pId <- D.getProcessId pPtr
+    ps <- readTVarIO $ nodeRt ^. RLens.processes
+    let mbThreadId = M.lookup pId ps
+    let newPs = M.delete pId ps
+    atomically $ writeTVar (nodeRt ^. RLens.processes) newPs
+    pure mbThreadId
 
 registerConnection
     :: R.AsNativeConnection protocol
@@ -91,7 +100,7 @@ startServer nodeRt connectionsVar port handlersScript = do
             port
             ((\f a' b -> Impl.runNodeL nodeRt $ f a' b) <$> handlers)
             (mkRegister connectionsVar)
-    atomically $ do 
+    atomically $ do
         whenJust res $ \servHandl ->
             putTMVar serversVar $ M.insert port servHandl servers
         unless (isJust res) $
@@ -106,14 +115,11 @@ stopServer (R.ServerHandle sockVar acceptWorkerId) = do
     atomically (putTMVar sockVar sock)
 
 interpretNodeDefinitionL :: NodeRuntime -> L.NodeDefinitionF a -> IO a
-interpretNodeDefinitionL nodeRt (L.NodeTag tag next) = do
+interpretNodeDefinitionL nodeRt (L.SetNodeTag tag next) = do
     atomically $ writeTVar (nodeRt ^. RLens.nodeTag) tag
     pure $ next ()
 
-interpretNodeDefinitionL nodeRt (L.EvalNodeL action next) = next <$> Impl.runNodeL nodeRt action
-
-interpretNodeDefinitionL nodeRt (L.EvalCoreEffectNodeDefinitionF coreEffect next) =
-    next <$> Impl.runCoreEffect (nodeRt ^. RLens.coreRuntime) coreEffect
+interpretNodeDefinitionL nodeRt (L.EvalNode action next) = next <$> Impl.runNodeL nodeRt action
 
 interpretNodeDefinitionL nodeRt (L.ServingTcp port action next) = do
     let tcpConnectionsVar = nodeRt ^. RLens.tcpConnects
@@ -145,8 +151,8 @@ interpretNodeDefinitionL nodeRt (L.ServingRpc port action next) = do
     res <- if M.member port servers
         then pure Nothing
         else runRpcServer logger port (runNodeL nodeRt) handlerMap
-    
-    atomically $ do 
+
+    atomically $ do
         whenJust res $ \servHandl ->
             putTMVar serversVar $ M.insert port servHandl servers
         unless (isJust res) $
@@ -168,7 +174,7 @@ interpretNodeDefinitionL nodeRt (L.Std handlers next) = do
                 case minput of
                     Nothing      -> pure ()
                     Just    line -> do
-                        res <- liftIO $ callHandler nodeRt m' $ T.pack line
+                        res <- liftIO $ callHandler nodeRt m' line
                         outputStrLn $ T.unpack res
                         whenJust filePath $ \path -> do
                             history <- getHistory
@@ -187,6 +193,11 @@ interpretNodeDefinitionL nodeRt (L.ForkProcess action next) = do
     addProcess nodeRt pPtr threadId
     pure $ next pPtr
 
+interpretNodeDefinitionL nodeRt (L.KillProcess pId next) = do
+    mbThreadId <- popProcess nodeRt pId
+    whenJust mbThreadId killThread
+    pure $ next ()
+
 interpretNodeDefinitionL _ (L.TryGetResult pPtr next) = do
     pVar <- D.getProcessVar pPtr
     mbResult <- atomically $ tryReadTMVar pVar
@@ -197,16 +208,12 @@ interpretNodeDefinitionL _ (L.AwaitResult pPtr next) = do
     result <- atomically $ takeTMVar pVar
     pure $ next result
 
-callHandler :: NodeRuntime -> Map Text (Value -> L.NodeL Text) -> Text -> IO Text
+callHandler :: NodeRuntime -> Map Text (String -> L.NodeL Text) -> String -> IO Text
 callHandler nodeRt methods msg = do
-    val <- try $ pure $ A.decode $ fromString $ T.unpack msg
-    case val of
-        Right (Just jval@((^? key "method" . _String) -> Just method)) ->
-            case methods ^. at method of
-                Just justMethod -> Impl.runNodeL nodeRt $ justMethod jval
-                Nothing         -> pure $ "The method " <> method <> " isn't supported."
-        Right _                    -> pure "Error of request parsing."
-        Left  (_ :: SomeException) -> pure "Error of request parsing."
+    let tag = T.pack $ takeWhile (/= ' ') msg
+    case methods ^. at tag of
+        Just justMethod -> Impl.runNodeL nodeRt $ justMethod msg
+        Nothing         -> pure $ "The method " <> tag <> " isn't supported."
 
 type RpcMethods t = Map Text (A.Value -> Int -> t)
 

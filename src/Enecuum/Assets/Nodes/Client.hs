@@ -1,18 +1,29 @@
-{-# LANGUAGE DuplicateRecordFields  #-}
-{-# LANGUAGE DeriveAnyClass         #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
--- module Enecuum.Assets.Nodes.Client where
-module Enecuum.Assets.Nodes.Client (clientNode, ClientNode(..), NodeConfig (..), Protocol(..)) where
+module Enecuum.Assets.Nodes.Client
+  ( clientNode
+  , ClientNode(..)
+  , NodeConfig (..)
+  , SendTo(..)
+  , Protocol(..)
+  ) where
 
 import qualified Data.Aeson                       as J
 import           Data.Aeson.Extra                 (noLensPrefix)
+import           Data.Complex
 import qualified Data.Map                         as Map
+import           Data.Set                         (union, (\\))
+import qualified Data.Set                         as Set
 import           Data.Text                        hiding (map)
+import           Enecuum.Assets.Blockchain.Keys
 import qualified Enecuum.Assets.Blockchain.Wallet as A
+import qualified Enecuum.Assets.Nodes.Address     as A
 import qualified Enecuum.Assets.Nodes.Messages    as M
-import qualified Enecuum.Domain                   as D
 import           Enecuum.Config
-import           Enecuum.Framework.Language.Extra (NodeStatus (..))
+import qualified Enecuum.Domain                   as D
+import           Enecuum.Framework.Domain.Error
+import qualified Enecuum.Framework.Lens           as Lens
 import qualified Enecuum.Language                 as L
 import           Enecuum.Prelude                  hiding (map, unpack)
 
@@ -28,6 +39,7 @@ instance Node ClientNode where
     data NodeScenario ClientNode = CLI
         deriving (Show, Generic)
     getNodeScript CLI = clientNode'
+    getNodeTag _ = ClientNode
 
 instance ToJSON   ClientNode                where toJSON    = J.genericToJSON    nodeConfigJsonOptions
 instance FromJSON ClientNode                where parseJSON = J.genericParseJSON nodeConfigJsonOptions
@@ -38,68 +50,41 @@ instance FromJSON (NodeScenario ClientNode) where parseJSON = J.genericParseJSON
 
 type TimeGap = Int
 
-data CreateTransaction              = CreateTransaction CLITransaction D.Address deriving ( Generic, Show, Eq, Ord, ToJSON)
-newtype GetLastKBlock               = GetLastKBlock D.Address
-data GetWalletBalance               = GetWalletBalance Int D.Address
-newtype GetLengthOfChain            = GetLengthOfChain D.Address
-newtype StartForeverChainGeneration = StartForeverChainGeneration D.Address
+data CreateTransaction              = CreateTransaction CLITransaction D.Address deriving (Show, Eq, Ord, Read)
+newtype GetLastKBlock               = GetLastKBlock D.Address deriving Read
+data GetWalletBalance               = GetWalletBalance Int D.Address deriving Read
+newtype GetLengthOfChain            = GetLengthOfChain D.Address deriving Read
+newtype StartForeverChainGeneration = StartForeverChainGeneration D.Address deriving Read
+data Ping                           = Ping Protocol D.Address deriving Read
+newtype StopRequest                 = StopRequest D.Address deriving Read
+data GetBlock                       = GetBlock D.StringHash D.Address deriving Read
+data Protocol                       = UDP | TCP | RPC deriving (Show, Eq, Ord, Read)
+data SendTo                         = SendTo Address D.PortNumber deriving Read
+data Address                        = Address D.Host D.PortNumber deriving Read
+
 data GenerateBlocksPacket           = GenerateBlocksPacket
     { blocks  :: D.BlockNumber
     , timeGap :: TimeGap
     , address :: D.Address
     }
-    deriving (Generic, Show)
-
-data Ping                           = Ping Protocol D.Address
-newtype StopRequest                 = StopRequest D.Address
-data GetBlock                       = GetBlock D.StringHash D.Address
-data Protocol                       = UDP | TCP | RPC deriving (Generic, Show, Eq, Ord, FromJSON)
+    deriving (Show, Read)
 
 data DumpToDB = DumpToDB
     { address :: D.Address
     }
-    deriving (Generic, Show, FromJSON)
+    deriving (Show, Read)
+
 data RestoreFromDB = RestoreFromDB
     { address :: D.Address
     }
-    deriving (Generic, Show, FromJSON)
+    deriving (Show, Read)
 
 data CLITransaction = CLITransaction
   { _owner    :: String
   , _receiver :: String
   , _amount   :: D.Amount
   , _currency :: D.Currency
-  } deriving ( Generic, Show, Eq, Ord, Read, Serialize)
-
-
-instance ToJSON CLITransaction where toJSON = genericToJSON noLensPrefix
-instance FromJSON CLITransaction where parseJSON = genericParseJSON noLensPrefix
-
-instance J.FromJSON Ping where
-    parseJSON = J.withObject "Ping" $ \o -> Ping <$> (o J..: "protocol") <*> (o J..: "address")
-
-instance J.FromJSON GetWalletBalance where
-    parseJSON = J.withObject "GetWalletBalance" $ \o -> GetWalletBalance <$> o J..: "walletID" <*> (o J..: "address")
-
-instance J.FromJSON CreateTransaction where
-    parseJSON = J.withObject "CreateTransaction" $ \o -> CreateTransaction <$> o J..: "tx" <*> (o J..: "address")
-
-instance J.FromJSON GetLastKBlock where
-    parseJSON = J.withObject "GetLastKBlock" $ \o -> GetLastKBlock <$> (o J..: "address")
-
-instance J.FromJSON GetLengthOfChain where
-    parseJSON = J.withObject "GetLengthOfChain" $ \o -> GetLengthOfChain <$> (o J..: "address")
-
-instance J.FromJSON StartForeverChainGeneration where
-    parseJSON = J.withObject "StartForeverChainGeneration" $ \o -> StartForeverChainGeneration <$> (o J..: "address")
-
-instance J.FromJSON GenerateBlocksPacket
-
-instance J.FromJSON StopRequest where
-    parseJSON = J.withObject "StopRequest" $ \o -> StopRequest <$> (o J..: "address")
-
-instance J.FromJSON GetBlock where
-    parseJSON = J.withObject "GetBlock" $ \o -> GetBlock <$> o J..: "hash" <*> (o J..: "address")
+  } deriving (Show, Eq, Ord, Read)
 
 sendSuccessRequest :: forall a. (ToJSON a, Typeable a) => D.Address -> a -> L.NodeL Text
 sendSuccessRequest address request = do
@@ -169,17 +154,17 @@ restoreFromDB (RestoreFromDB address) = do
 
 getLengthOfChain :: GetLengthOfChain -> L.NodeL Text
 getLengthOfChain (GetLengthOfChain address) = do
-    res :: Either Text D.KBlock <- L.makeRpcRequest address M.GetLastKBlock
-    case res of
-        Right kBlock -> pure $ "Length of chain is " <> show (D._number kBlock)
-        Left t       -> pure t
+    mKBlock <- L.makeRpcRequest address M.GetLastKBlock
+    pure $ case mKBlock of
+        Right kBlock       -> "Length of chain is " <> show (D._number kBlock)
+        Left  requestError -> requestError
 
 ping :: Ping -> L.NodeL Text
 ping (Ping TCP address) = do
-    res <- L.withConnection D.Tcp address $ \conn -> L.send conn M.Ping
-    pure $ case res of
+    ok <- L.withConnection D.Tcp address $ \conn -> L.send conn M.Ping
+    pure $ case ok of
         Just (Right _) -> "Tcp port is available."
-        Just (Left _)  -> "Tcp disconnection."
+        Just (Left  _) -> "Tcp disconnection."
         _              -> "Tcp port is not available."
 
 ping (Ping RPC address) = do
@@ -193,33 +178,37 @@ stopRequest (StopRequest address) = sendSuccessRequest address M.Stop
 
 getBlock :: GetBlock -> L.NodeL Text
 getBlock (GetBlock hash address) = do
-    res :: Either Text D.NodeContent <- L.makeRpcRequest address (M.GetGraphNode hash)
-    case res of
-        Right (D.KBlockContent block) -> pure $ "Key block is "   <> show block
-        Right (D.MBlockContent block) -> pure $ "Microblock is " <> show block
-        Left  text                    -> pure $ "Error: "         <> text
+    mblock <- L.makeRpcRequest address (M.GetGraphNode hash)
+    pure $ case mblock of
+        Right (D.KBlockContent block) -> "Key block is "  <> show block
+        Right (D.MBlockContent block) -> "Microblock is " <> show block
+        Left  requestError            -> "Error: "        <> requestError
 
-{-
-Requests JSON:
-{"method":"GetLastKBlock", "address":{"host":"127.0.0.1", "port": 2005}}
-{"method":"StartForeverChainGeneration", "address":{"host":"127.0.0.1", "port": 2005}}
-{"method":"GenerateBlocksPacket", "blocks" : 2, "timeGap":0, "address":{"host":"127.0.0.1", "port": 2005}}
-{"method":"GetWalletBalance", "walletID": 2, "address":{"host":"127.0.0.1", "port": 2008}}
-{"method":"GetWalletBalance", "walletID": 2, "address":{"host":"127.0.0.1", "port": 2009}}
-{"method":"StopNode"}
-{"method":"Ping", "protocol":"RPC", "address":{"host":"127.0.0.1", "port": 2008}}
-{"method":"GetLengthOfChain", "address":{"host":"127.0.0.1", "port": 2008}}
-{"method":"StopRequest", "address":{"host":"127.0.0.1", "port": 2008}}
-{"method":"CreateTransaction", "tx": {"amount":15, "owner": "me", "receiver":"Alice","currency": "ENQ"}, "address":{"host":"127.0.0.1", "port": 2008}}
-{"method":"DumpToDB", "address":{"host":"127.0.0.1", "port": 2008}}
-{"method":"RestoreFromDB", "address":{"host":"127.0.0.1", "port": 2008}}
--}
+createNodeId :: M.CreateNodeId -> L.NodeL Text
+createNodeId (M.CreateNodeId password) = do
+    createKeyPair NodeId $ User (Manual password)
+    pure "Success"
+
+createWallet :: M.CreateWallet -> L.NodeL Text
+createWallet (M.CreateWallet password) = do
+    createWallet' "default" $ User (Manual password)
+    pure "Success"
+
+createWalletWithAlias :: M.CreateWalletWithAlias -> L.NodeL Text
+createWalletWithAlias (M.CreateWalletWithAlias alias (M.CreateWallet password)) = do
+    createWallet' alias $ User (Manual password)
+    pure "Success"
+
+showMyWallets :: M.ShowMyWallets -> L.NodeL Text
+showMyWallets _ = showWallets
 
 
-{-
-Requests:
-GenerateBlocksPacket {blocks = 1, timeGap = 0, address = Address {_host= "127.0.0.1", _port = 2005}}
-SendTo (Address "127.0.0.1" 5001) 5002
+-- TODO change it to console help
+{- Commands for client:
+CreateNodeId "Password"
+CreateWallet "Password"
+ShowMyWallets
+CreateWalletWithAlias "alias" (CreateWallet "Password")
 -}
 
 clientNode :: L.NodeDefinitionL ()
@@ -228,13 +217,20 @@ clientNode = clientNode' (ClientNodeConfig 42)
 clientNode' :: NodeConfig ClientNode -> L.NodeDefinitionL ()
 clientNode' _ = do
     L.logInfo "Client started"
-    L.nodeTag "Client"
-    stateVar <- L.newVarIO NodeActing
+    L.setNodeTag "Client"
+    stateVar <- L.newVarIO D.NodeActing
+
     L.std $ do
-        -- interaction with any node
+        -- network
         L.stdHandler ping
         L.stdHandler stopRequest
         L.stdHandler $ L.stopNodeHandler' stateVar
+
+        -- local activity
+        L.stdHandler createNodeId
+        L.stdHandler createWallet
+        L.stdHandler createWalletWithAlias
+        L.stdHandler showMyWallets
 
         -- interaction with graph node
         L.stdHandler createTransaction
@@ -246,15 +242,10 @@ clientNode' _ = do
         L.stdHandler getLengthOfChain
         L.stdHandler getBlock
 
-        -- interaction with poa node
+        -- interaction with pow node
         L.stdHandler startForeverChainGenerationHandler
+
+        --  GenerateBlocksPacket {blocks = 2, timeGap = 0, address = Address {_host = "127.0.0.1", _port = 6020}}
         L.stdHandler generateBlocksPacketHandler
+
     L.awaitNodeFinished' stateVar
-
-eitherToText :: Show a => Either Text a -> Text
-eitherToText (Left  a) = "Server error: " <> a
-eitherToText (Right a) = show a
-
-eitherToText2 :: Either Text Text -> Text
-eitherToText2 (Left  a) = "Server error: " <> a
-eitherToText2 (Right a) = a

@@ -1,23 +1,36 @@
-{-# LANGUAGE DuplicateRecordFields  #-}
-{-# LANGUAGE DeriveAnyClass         #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# OPTIONS_GHC -fno-warn-orphans   #-}
 
 module Enecuum.Framework.Domain.Networking where
 
+import qualified Data.Text       as T
 import           Enecuum.Prelude
-import qualified Data.Text as T
 
-import           Data.Scientific
+import qualified Data.Aeson      as A
 import           Data.IP
-import qualified Data.Aeson as A
-import qualified Network.Socket as S hiding (recv)
+import           Data.Scientific
+import qualified Network.Socket  as S hiding (recv)
 
+type Host = String
+
+-- | Node address (like IP)
+data Address = Address
+    { _host :: Host
+    , _port :: S.PortNumber
+    } deriving (Show, Eq, Ord, Generic, Serialize, Read)
+
+type MyAddress       = Address
+type SennderAddress  = Address
+type ReceiverAddress = Address
 
 data Udp = Udp
 data Tcp = Tcp
 data Rpc = Rpc
 
-data NetworkError = ConnectionClosed | TooBigMessage | AddressNotExist deriving (Eq, Show)
+data NetworkError = ConnectionClosed Text | TooBigMessage Text | AddressNotExist Text
+    deriving (Eq, Show)
 
 newtype BoundAddress = BoundAddress Address
     deriving (Show, Eq, Ord, Generic)
@@ -25,16 +38,17 @@ newtype BoundAddress = BoundAddress Address
 type ConnectId      = Int
 
 data Connection a = Connection
-    { _address      :: BoundAddress
-    , _connectId    :: ConnectId
+    { _address   :: BoundAddress
+    , _connectId :: ConnectId
     }
     deriving (Show, Eq, Ord, Generic)
+
+getHostAddress :: Connection a -> Host
+getHostAddress (Connection (BoundAddress (Address host _)) _) = host
 
 type RawData = LByteString
 
 data NetworkMsg = NetworkMsg Text A.Value deriving (Generic, ToJSON, FromJSON)
-
-type Host = String
 
 sockAddrToHost :: S.SockAddr -> Host
 sockAddrToHost sockAddr = case sockAddr of
@@ -43,11 +57,8 @@ sockAddrToHost sockAddr = case sockAddr of
     S.SockAddrUnix string             -> string
     _                                 -> error "Error"
 
--- | Node address (like IP)
-data Address = Address
-    { _host :: Host
-    , _port :: S.PortNumber
-    } deriving (Show, Eq, Ord, Generic)
+deriving instance Generic S.PortNumber
+instance Serialize S.PortNumber
 
 instance ToJSON Address where
     toJSON (Address h p) = A.object ["host" A..= h, "port" A..= p]

@@ -1,19 +1,19 @@
+{-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE TypeInType             #-}
-{-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 
 module Enecuum.Framework.Node.Language where
 
-import           Enecuum.Prelude
-import qualified Enecuum.Core.Language                    as L
-import qualified Enecuum.Framework.Networking.Language    as L
-import qualified Enecuum.Framework.Domain.Networking      as D
-import qualified Enecuum.Core.Types                       as D
+import qualified Enecuum.Core.Language                      as L
+import qualified Enecuum.Core.Types                         as D
+import qualified Enecuum.Framework.Domain.Networking        as D
 import           Enecuum.Framework.Handler.Network.Language
+import qualified Enecuum.Framework.Networking.Language      as L
+import           Enecuum.Prelude
 import           Language.Haskell.TH.MakeFunctor
 
 -- | Node language.
@@ -23,7 +23,7 @@ data NodeF next where
     -- | Eval networking.
     EvalNetworking :: L.NetworkingL a -> (a -> next) -> NodeF next
     -- | Eval core effect.
-    EvalCoreEffectNodeF :: L.CoreEffect a -> (a -> next) -> NodeF next
+    EvalCoreEffect :: L.CoreEffectL a -> (a -> next) -> NodeF next
     -- | Eval graph non-atomically (parts of script are evaluated atomically but separated from each other).
     EvalGraphIO :: (Serialize c, D.StringHashable c) => D.TGraph c -> Free (L.HGraphF (D.TNodeL c)) x -> (x -> next) -> NodeF next
     -- | Create new graph instance.
@@ -53,8 +53,8 @@ evalNetworking :: L.NetworkingL a -> NodeL a
 evalNetworking newtorking = liftF $ EvalNetworking newtorking id
 
 -- | Eval core effect.
-evalCoreEffectNodeF :: L.CoreEffect a -> NodeL a
-evalCoreEffectNodeF coreEffect = liftF $ EvalCoreEffectNodeF coreEffect id
+evalCoreEffect :: L.CoreEffectL a -> NodeL a
+evalCoreEffect coreEffect = liftF $ EvalCoreEffect coreEffect id
 
 -- | Init database with the options passed for the specific storage type.
 initDatabase :: D.DBConfig db -> NodeL (D.DBResult (D.Storage db))
@@ -74,13 +74,15 @@ withConnection
 withConnection protocol address f = do
     mCon <- open protocol address $ pure ()
     case mCon of
-        Just con -> do 
+        Just con -> do
             !a <- f con
             close con
             pure $ Just a
         Nothing -> pure Nothing
 
-
+listener :: (Connection m con, Typeable con, Typeable t,
+            Typeable m, Monad m, FromJSON t) =>
+            (t -> m ()) -> NetworkHandlerL con m ()
 listener !f = handler (\a conn -> void (close conn) >> f a)
 
 class Connection a con where
@@ -108,25 +110,34 @@ evalGraphIO g graphAction = liftF $ EvalGraphIO g graphAction id
 newGraph :: (Serialize c, D.StringHashable c) => NodeL (D.TGraph c)
 newGraph = liftF $ NewGraph id
 
+instance L.IOL NodeL where
+    evalIO = evalCoreEffect . L.evalIO
+
 instance L.Logger NodeL where
-    logMessage level = evalCoreEffectNodeF . L.logMessage level
+    logMessage level = evalCoreEffect . L.logMessage level
 
 instance L.ERandom NodeL where
-    evalCoreCrypto      = evalCoreEffectNodeF . L.evalCoreCrypto
-    getRandomInt        = evalCoreEffectNodeF . L.getRandomInt
-    getRandomByteString = evalCoreEffectNodeF . L.getRandomByteString
-    nextUUID            = evalCoreEffectNodeF   L.nextUUID
+    evalCoreCrypto      = evalCoreEffect . L.evalCoreCrypto
+    getRandomInt        = evalCoreEffect . L.getRandomInt
+    getRandomByteString = evalCoreEffect . L.getRandomByteString
+    nextUUID            = evalCoreEffect   L.nextUUID
 
 instance L.FileSystem NodeL where
-    readFile         = evalCoreEffectNodeF . L.readFile
-    getHomeDirectory = evalCoreEffectNodeF   L.getHomeDirectory
-    createFilePath   = evalCoreEffectNodeF . L.createFilePath 
+    readFile         = evalCoreEffect . L.readFile
+    writeFile filename text = evalCoreEffect $ L.writeFile filename text
+    getHomeDirectory = evalCoreEffect   L.getHomeDirectory
+    createFilePath   = evalCoreEffect . L.createFilePath
+    doesFileExist    = evalCoreEffect . L.doesFileExist
 
 instance L.ControlFlow NodeL where
-    delay = evalCoreEffectNodeF . L.delay
+    delay = evalCoreEffect . L.delay
 
 instance L.StateIO NodeL where
     atomically     = evalStateAtomically
     newVarIO       = evalStateAtomically . L.newVar
     readVarIO      = evalStateAtomically . L.readVar
     writeVarIO var = evalStateAtomically . L.writeVar var
+
+instance L.Time NodeL where
+    getUTCTime   = evalCoreEffect L.getUTCTime
+    getPosixTime = evalCoreEffect L.getPosixTime

@@ -2,7 +2,9 @@ module Enecuum.Tests.Scenarios.PoASpec where
 
 import qualified Data.Map                             as M
 import qualified Enecuum.Assets.Blockchain.Generation as A
-import qualified Enecuum.Assets.Scenarios             as A
+import qualified Enecuum.Assets.Nodes.Address         as A
+import qualified Enecuum.Assets.Nodes.Messages        as D
+import qualified Enecuum.Assets.TstScenarios          as Tst
 import qualified Enecuum.Domain                       as D
 import qualified Enecuum.Interpreters                 as I
 import qualified Enecuum.Language                     as L
@@ -12,6 +14,7 @@ import           Enecuum.Testing.Integrational
 import           Test.Hspec
 import           Test.Hspec.Contrib.HUnit             (fromHUnitTest)
 import           Test.HUnit
+
 import           Data.Typeable
 import           Enecuum.Tests.Wrappers
 
@@ -21,38 +24,39 @@ spec = slowTest $ describe "PoA" $ fromHUnitTest $ TestList
 
 testPoA :: Test
 testPoA = TestCase $ withNodesManager $ \mgr -> do
-    void $ startNode Nothing mgr $ A.graphNodeTransmitter A.noDBConfig
-    void $ startNode Nothing mgr A.powNode
-    void $ startNode Nothing mgr $ A.poaNode A.Good $ A.PoANodeConfig 42
+    let transmiterRpcAddress       = A.getRpcAddress A.tstGraphNodeTransmitterAddress
+
+    void $ startNode Nothing mgr $ Tst.tstGraphNode Tst.tstGraphNodeTransmitterConfig
+    void $ startNode Nothing mgr Tst.powNode
+    void $ startNode Nothing mgr $ Tst.poaNode Tst.Good Tst.tstGenPoANodeConfig
 
     -- Generate and send transactions to graph node
     transactions <- I.runERandomL $ replicateM A.transactionsInMicroblock $ A.genTransaction A.Generated
-    _ :: [Either Text A.SuccessMsg] <- forM transactions $ \tx ->
-        makeIORpcRequest A.graphNodeTransmitterRpcAddress $ A.CreateTransaction tx
+    _ :: [Either Text D.SuccessMsg] <- forM transactions $ \tx ->
+        makeIORpcRequest transmiterRpcAddress $ D.CreateTransaction tx
 
     -- Check transaction pending on graph node
-    txPending :: [D.Transaction] <- makeRpcRequestUntilSuccess A.graphNodeTransmitterRpcAddress $ A.GetTransactionPending
+    txPending :: [D.Transaction] <- makeRpcRequestUntilSuccess transmiterRpcAddress D.GetTransactionPending
     (sort txPending) `shouldBe` (sort transactions)
 
     -- Ask pow node to generate n kblocks
     let timeGap = 0
     let kblockCount = 1
-    _ :: Either Text A.SuccessMsg <- makeIORpcRequest A.powNodeRpcAddress $ A.NBlockPacketGeneration kblockCount timeGap
+    _ :: Either Text D.SuccessMsg <- makeIORpcRequest (A.getRpcAddress A.tstGenPoWNodeAddress) $ D.NBlockPacketGeneration kblockCount timeGap
 
     -- Get last kblock from graph node
-    kBlock :: D.KBlock <- makeRpcRequestUntilSuccess A.graphNodeTransmitterRpcAddress $ A.GetLastKBlock
+    kBlock :: D.KBlock <- makeRpcRequestUntilSuccess transmiterRpcAddress D.GetLastKBlock
     let kblockHash = D.toHash kBlock
 
     -- Microblock on graph node received from poa
-    (A.GetMBlocksForKBlockResponse mblock) <- do
-        let request = A.GetMBlocksForKBlockRequest kblockHash
-        let address = A.graphNodeTransmitterRpcAddress
-        let predicate (A.GetMBlocksForKBlockResponse mblock) = length mblock == 1
-        makeRpcRequestWithPredicate predicate address request
+    (D.GetMBlocksForKBlockResponse mblock) <- do
+        let request = D.GetMBlocksForKBlockRequest kblockHash
+        let predicate (D.GetMBlocksForKBlockResponse mblock) = length mblock == 1
+        makeRpcRequestWithPredicate predicate transmiterRpcAddress request
     (length mblock) `shouldBe` 1
 
     -- Check transaction pending on graph node, it must to be empty now
     void $ do
         let predicate :: [D.Transaction] -> Bool
             predicate txPending = txPending == []
-        makeRpcRequestWithPredicate predicate A.graphNodeTransmitterRpcAddress $ A.GetTransactionPending
+        makeRpcRequestWithPredicate predicate transmiterRpcAddress D.GetTransactionPending

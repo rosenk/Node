@@ -1,20 +1,20 @@
 {-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE FunctionalDependencies #-}
 
 module Enecuum.Framework.NodeDefinition.Language where
 
-import           Enecuum.Prelude
-import qualified Enecuum.Core.Language                 as L
-import qualified Enecuum.Framework.Domain              as D
-import qualified Enecuum.Framework.Node.Language       as L
-import qualified Enecuum.Framework.Networking.Language as L
-import           Enecuum.Framework.Handler.Rpc.Language  (RpcHandlerL)
-import           Enecuum.Framework.Handler.Network.Language
+import qualified Enecuum.Core.Language                      as L
+import qualified Enecuum.Framework.Domain                   as D
 import           Enecuum.Framework.Handler.Cmd.Language
-import           Language.Haskell.TH.MakeFunctor (makeFunctorInstance)
+import           Enecuum.Framework.Handler.Network.Language
+import           Enecuum.Framework.Handler.Rpc.Language     (RpcHandlerL)
+import qualified Enecuum.Framework.Networking.Language      as L
+import qualified Enecuum.Framework.Node.Language            as L
+import           Enecuum.Prelude
+import           Language.Haskell.TH.MakeFunctor            (makeFunctorInstance)
 
 -- TODO: it's possible to make these steps evaluating step-by-step, in order.
 -- Think about if this really needed.
@@ -23,11 +23,9 @@ import           Language.Haskell.TH.MakeFunctor (makeFunctorInstance)
 -- Allows to specify what actions should be done when node starts.
 data NodeDefinitionF next where
     -- | Set node tag. For example, "boot node".
-    NodeTag        :: D.NodeTag -> (() -> next) -> NodeDefinitionF next
+    SetNodeTag     :: D.NodeTag -> (() -> next) -> NodeDefinitionF next
     -- | Evaluate some node model.
-    EvalNodeL      :: L.NodeL  a -> (a -> next) -> NodeDefinitionF next
-    -- | Eval core effect.
-    EvalCoreEffectNodeDefinitionF :: L.CoreEffect a -> (a -> next) -> NodeDefinitionF next
+    EvalNode       :: L.NodeL  a -> (a -> next) -> NodeDefinitionF next
     -- | Start serving of RPC requests.
     ServingRpc     :: D.PortNumber -> RpcHandlerL L.NodeL () -> (Maybe () -> next) -> NodeDefinitionF next
     -- | Stop serving of Rpc server.
@@ -40,6 +38,8 @@ data NodeDefinitionF next where
     -- Process interface. TODO: It's probably wise to move it to own language.
     -- | Fork a process for node.
     ForkProcess :: L.NodeL a -> (D.ProcessPtr a -> next) -> NodeDefinitionF next
+    -- | Hardly kill the thread.
+    KillProcess :: D.ProcessPtr a -> (() -> next) -> NodeDefinitionF next
     -- | Try get result (non-blocking).
     TryGetResult :: D.ProcessPtr a -> (Maybe a -> next) -> NodeDefinitionF next
     -- | Await for result (blocking).
@@ -57,12 +57,12 @@ getBoundedPorts :: NodeDefinitionL [D.PortNumber]
 getBoundedPorts = liftF $ GetBoundedPorts id
 
 -- | Sets tag for node.
-nodeTag :: D.NodeTag -> NodeDefinitionL ()
-nodeTag tag = liftF $ NodeTag tag id
+setNodeTag :: D.NodeTag -> NodeDefinitionL ()
+setNodeTag tag = liftF $ SetNodeTag tag id
 
 -- | Runs node scenario.
-evalNodeL :: L.NodeL a -> NodeDefinitionL a
-evalNodeL action = liftF $ EvalNodeL action id
+evalNode :: L.NodeL a -> NodeDefinitionL a
+evalNode action = liftF $ EvalNode action id
 
 -- | Fork a process for node.
 fork :: L.NodeL a -> NodeDefinitionL (D.ProcessPtr a)
@@ -71,6 +71,15 @@ fork action = liftF $ ForkProcess action id
 -- | Fork a process for node.
 process :: L.NodeL () -> NodeDefinitionL ()
 process = void . fork
+
+-- | Hardly kill a process.
+killProcess :: D.ProcessPtr a -> NodeDefinitionL ()
+killProcess processPtr = liftF $ KillProcess processPtr id
+
+periodic :: Int -> L.NodeL a -> NodeDefinitionL ()
+periodic time action = process $ forever $ do
+    L.delay time
+    action
 
 -- | Try get result from a process (non-blocking).
 tryGetResult :: D.ProcessPtr a -> NodeDefinitionL (Maybe a)
@@ -81,16 +90,16 @@ awaitResult :: D.ProcessPtr a -> NodeDefinitionL a
 awaitResult handle = liftF $ AwaitResult handle id
 
 -- | Eval core effect.
-evalCoreEffectNodeDefinitionF :: L.CoreEffect a -> NodeDefinitionL a
-evalCoreEffectNodeDefinitionF coreEffect = liftF $ EvalCoreEffectNodeDefinitionF coreEffect id
+evalCoreEffectNodeDefinitionF :: L.CoreEffectL a -> NodeDefinitionL a
+evalCoreEffectNodeDefinitionF = scenario . L.evalCoreEffect
 
 -- | Runs scenario as initialization.
 initialization :: L.NodeL a -> NodeDefinitionL a
-initialization = evalNodeL
+initialization = evalNode
 
 -- | Runs scenario.
 scenario :: L.NodeL a -> NodeDefinitionL a
-scenario = evalNodeL
+scenario = evalNode
 
 class Serving c a | c -> a where
     serving :: c -> D.PortNumber -> a -> NodeDefinitionL (Maybe ())
@@ -105,14 +114,14 @@ instance Serving D.Udp (NetworkHandlerL D.Udp L.NodeL ()) where
     serving _ port handlersF = liftF $ ServingUdp port handlersF id
 
 instance L.Connection L.NodeL a => L.Connection NodeDefinitionL a where
-    close   conn       = evalNodeL $ L.close conn
-    open  t addr handl = evalNodeL $ L.open t addr handl
+    close   conn       = evalNode $ L.close conn
+    open  t addr handl = evalNode $ L.open t addr handl
 
 instance L.Send a L.NodeL => L.Send a NodeDefinitionL where
-    send conn msg = evalNodeL $ L.send conn msg
+    send conn msg = evalNode $ L.send conn msg
 
 instance L.SendUdp NodeDefinitionL where
-    notify conn msg = evalNodeL $ L.notify conn msg
+    notify conn msg = evalNode $ L.notify conn msg
 
 -- | Starts RPC server.
 {-# DEPRECATED servingRpc "Use L.serving" #-}
@@ -138,6 +147,12 @@ instance L.ERandom NodeDefinitionL where
     getRandomByteString = evalCoreEffectNodeDefinitionF . L.getRandomByteString
     nextUUID            = evalCoreEffectNodeDefinitionF   L.nextUUID
 
+instance L.FileSystem NodeDefinitionL where
+    readFile filename       = evalCoreEffectNodeDefinitionF $ L.readFile filename
+    writeFile filename text = evalCoreEffectNodeDefinitionF $ L.writeFile filename text
+    getHomeDirectory        = evalCoreEffectNodeDefinitionF   L.getHomeDirectory
+    createFilePath filepath = evalCoreEffectNodeDefinitionF $ L.createFilePath filepath
+
 instance L.ControlFlow NodeDefinitionL where
     delay = evalCoreEffectNodeDefinitionF . L.delay
 
@@ -146,3 +161,7 @@ instance L.StateIO NodeDefinitionL where
     newVarIO       = scenario . L.newVarIO
     readVarIO      = scenario . L.readVarIO
     writeVarIO var = scenario . L.writeVarIO var
+
+instance L.Time NodeDefinitionL where
+    getUTCTime   = evalCoreEffectNodeDefinitionF L.getUTCTime
+    getPosixTime = evalCoreEffectNodeDefinitionF L.getPosixTime
