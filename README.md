@@ -62,9 +62,9 @@ The framework represents a set of embedded monadic languages organized hierarchi
 
 `sudo nano ~/.profile` and append `export PATH=$PATH:$HOME/.local/bin` at the end.
 
-### Install RocksDB
+### Install External dependencies
 
-`sudo apt install librocksdb-dev`
+`sudo apt update && sudo apt install librocksdb-dev libgd-dev libtinfo-dev -y`
 
 ### Build Node
 
