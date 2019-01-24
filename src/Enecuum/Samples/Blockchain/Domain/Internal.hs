@@ -29,7 +29,15 @@ transactionForSign (Transaction {..}) = TransactionForSign
   , _currency' = _currency
   }
 
-signTransaction :: (Monad m, L.ERandom m) => OwnerPubKey -> OwnerPrivateKey -> Receiver -> Amount -> Currency -> UUID -> m Transaction
+signTransaction
+  :: (Monad m, L.ERandom m, L.Crypto m)
+  => OwnerPubKey
+  -> OwnerPrivateKey
+  -> Receiver
+  -> Amount
+  -> Currency
+  -> UUID
+  -> m Transaction
 signTransaction owner ownerPriv receiver amount currency uuid = do
   let tx = TransactionForSign
         { _owner' = owner
@@ -37,7 +45,7 @@ signTransaction owner ownerPriv receiver amount currency uuid = do
         , _amount' = amount
         , _currency' = currency
         }
-  signature <- L.evalCoreCrypto $ L.sign ownerPriv tx
+  signature <- L.sign ownerPriv tx
   pure $ Transaction
         { _owner = owner
         , _receiver = receiver
@@ -61,14 +69,20 @@ microblockForSign Microblock {..} = MicroblockForSign
     , _publisher = _publisher
     }
 
-signMicroblock :: (Monad m, L.ERandom m) => StringHash -> [Transaction] -> PublicKey -> PrivateKey -> m Microblock
+signMicroblock
+    :: (Monad m, L.ERandom m, L.Crypto m)
+    => StringHash
+    -> [Transaction]
+    -> PublicKey
+    -> PrivateKey
+    -> m Microblock
 signMicroblock hashofKeyBlock tx publisherPubKey publisherPrivKey = do
     let mb = MicroblockForSign
             { _keyBlock = hashofKeyBlock
             , _transactions = tx
             , _publisher = publisherPubKey
             }
-    signature <- L.evalCoreCrypto $ L.sign publisherPrivKey mb
+    signature <- L.sign publisherPrivKey mb
     pure $ Microblock
             { _keyBlock = hashofKeyBlock
             , _transactions = tx

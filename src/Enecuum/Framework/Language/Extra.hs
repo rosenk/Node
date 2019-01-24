@@ -36,10 +36,10 @@ class HasStatus s a | s -> a where
 -- import Enecuum.Language (HasGraph)
 
 withGraph
-    :: (HasGraph s (D.TGraph c), Serialize c, StringHashable c)
+    :: (HasGraph s (D.TGraph c), Serialize c, StringHashable c, L.State' m)
     => s
     -> Free (L.HGraphF (D.TNodeL c)) a
-    -> L.StateL a
+    -> m a
 withGraph s = L.evalGraph (s ^. graph)
 
 -- | Evals some graph action (non-atomically) having a structure that contains a graph variable.
@@ -89,8 +89,9 @@ stopNodeHandler' statusVar _ = stopNode' statusVar >> pure "Finished."
 -- (made by `makeFieldsNoPrefix`):
 -- import Enecuum.Language (HasStatus)
 awaitNodeFinished :: HasStatus s (D.StateVar D.NodeStatus) => s -> L.NodeDefinitionL ()
-awaitNodeFinished nodeData = L.scenario $ L.atomically $ unlessM isNodeFinished L.retry
+awaitNodeFinished nodeData = L.atomically $ unlessM isNodeFinished L.retry
     where
+        isNodeFinished :: L.State' m => m Bool
         isNodeFinished = do
             s <- L.readVar $ nodeData ^. status
             pure $ s == D.NodeFinished
@@ -101,6 +102,7 @@ awaitNodeFinished'
     -> L.NodeDefinitionL ()
 awaitNodeFinished' statusVar = L.scenario $ L.atomically $ unlessM isNodeFinished L.retry
     where
+        isNodeFinished :: L.State' m => m Bool
         isNodeFinished = do
             s <- L.readVar statusVar
             pure $ s == D.NodeFinished
@@ -129,7 +131,7 @@ await ref = L.atomically $ do
         Just value -> pure value
         Nothing    -> L.retry
 
-takeVar :: D.StateVar (Maybe a) -> L.StateL a
+takeVar :: (L.State' m) => D.StateVar (Maybe a) -> m a
 takeVar var = do
     mbVal <- L.readVar var
     case mbVal of

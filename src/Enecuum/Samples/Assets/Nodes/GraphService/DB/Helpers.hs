@@ -14,49 +14,49 @@ withKBlocksDB
     :: forall s db a
     .  Lens.HasKBlocksDB s (D.Storage db)
     => s
-    -> L.DatabaseL db a
+    -> (forall m. L.Database m => m a)
     -> L.NodeL a
-withKBlocksDB dbModel = L.withDatabase (dbModel ^. Lens.kBlocksDB)
+withKBlocksDB dbModel db = L.withDatabase (dbModel ^. Lens.kBlocksDB) db
 
 withKBlocksMetaDB
     :: forall s db a
     .  Lens.HasKBlocksMetaDB s (D.Storage db)
     => s
-    -> L.DatabaseL db a
+    -> (forall m. L.Database m => m a)
     -> L.NodeL a
-withKBlocksMetaDB dbModel = L.withDatabase (dbModel ^. Lens.kBlocksMetaDB)
+withKBlocksMetaDB dbModel db = L.withDatabase (dbModel ^. Lens.kBlocksMetaDB) db
 
 withMBlocksDB
     :: forall s db a
     .  Lens.HasMBlocksDB s (D.Storage db)
     => s
-    -> L.DatabaseL db a
+    -> (forall m. L.Database m => m a)
     -> L.NodeL a
-withMBlocksDB dbModel = L.withDatabase (dbModel ^. Lens.mBlocksDB)
+withMBlocksDB dbModel db = L.withDatabase (dbModel ^. Lens.mBlocksDB) db
 
 withMBlocksMetaDB
     :: forall s db a
     .  Lens.HasMBlocksMetaDB s (D.Storage db)
     => s
-    -> L.DatabaseL db a
+    -> (forall m. L.Database m => m a)
     -> L.NodeL a
-withMBlocksMetaDB dbModel = L.withDatabase (dbModel ^. Lens.mBlocksMetaDB)
+withMBlocksMetaDB dbModel db = L.withDatabase (dbModel ^. Lens.mBlocksMetaDB) db
 
 withTransactionsDB
     :: forall s db a
     .  Lens.HasTransactionsDB s (D.Storage db)
     => s
-    -> L.DatabaseL db a
+    -> (forall m. L.Database m => m a)
     -> L.NodeL a
-withTransactionsDB dbModel = L.withDatabase (dbModel ^. Lens.transactionsDB)
+withTransactionsDB dbModel db = L.withDatabase (dbModel ^. Lens.transactionsDB) db
 
 withTransactionsMetaDB
     :: forall s db a
     .  Lens.HasTransactionsMetaDB s (D.Storage db)
     => s
-    -> L.DatabaseL db a
+    -> (forall m. L.Database m => m a)
     -> L.NodeL a
-withTransactionsMetaDB dbModel = L.withDatabase (dbModel ^. Lens.transactionsMetaDB)
+withTransactionsMetaDB dbModel db = L.withDatabase (dbModel ^. Lens.transactionsMetaDB) db
 
 withDBModel :: GraphServiceData -> (D.DBModel -> L.NodeL ()) -> L.NodeL ()
 withDBModel (_db -> Just dbModel) act = act dbModel

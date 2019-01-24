@@ -16,7 +16,7 @@ import           Enecuum.Prelude
 -- TODO: support forks.
 -- TODO: support check of "not valid k-block"
 -- TODO: support check of "already exist k-block"
-validateKBlock :: BlockchainData -> D.KBlock -> L.StateL D.KBlockValidity
+validateKBlock :: (L.State' m) => BlockchainData -> D.KBlock -> m D.KBlockValidity
 validateKBlock bData kBlock = do
     topKBlock <- L.getTopKBlock $ bData ^. Lens.windowedGraph
 
@@ -38,7 +38,7 @@ data KBlockResult
     | KBlockErrored
     deriving Eq
 
-addTopKBlock' :: D.BlockchainData -> D.KBlock -> L.StateL KBlockResult
+addTopKBlock' :: (L.State' m) => D.BlockchainData -> D.KBlock -> m KBlockResult
 addTopKBlock' bData kBlock = do
     res <- L.addTopKBlock "[Network]" bData kBlock
     pure $ if res then KBlockAdded else KBlockErrored
@@ -81,13 +81,13 @@ processKBlockPending bData = L.atomically $ do
             L.addTopKBlock "[Pending]" bData kBlock
 
 -- | Add new key block to pending.
-addBlockToPending :: BlockchainData -> D.KBlock -> L.StateL ()
+addBlockToPending :: (L.State' m) => BlockchainData -> D.KBlock -> m ()
 addBlockToPending bData kBlock = do
     L.logInfo $ "Adding KBlock to pending: " +|| kBlock ||+ ""
     L.modifyVar (_kBlockPending bData) (Map.insert (kBlock ^. Lens.number) kBlock)
 
 -- | Add new transaction to pending.
-addTransactionToPending :: BlockchainData -> D.Transaction -> L.StateL Bool
+addTransactionToPending :: (L.State' m) => BlockchainData -> D.Transaction -> m Bool
 addTransactionToPending bData transaction = do
     L.logInfo "Add transaction to pending"
     L.modifyVar (_transactionPending bData) (Map.insert (D.toHash transaction) transaction)

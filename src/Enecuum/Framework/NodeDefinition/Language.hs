@@ -95,9 +95,9 @@ tryGetResult handle = liftF $ TryGetResult handle id
 awaitResult :: D.ProcessPtr a -> NodeDefinitionL a
 awaitResult handle = liftF $ AwaitResult handle id
 
--- | Eval core effect.
-evalCoreEffectNodeDefinitionF :: L.CoreEffectL a -> NodeDefinitionL a
-evalCoreEffectNodeDefinitionF = scenario . L.evalCoreEffect
+-- -- | Eval core effect.
+evalCoreEffectNodeDefinitionF :: (forall m. L.CoreEffect m => m a) -> NodeDefinitionL a
+evalCoreEffectNodeDefinitionF v = scenario (L.evalCoreEffect v)
 
 -- | Runs scenario as initialization.
 initialization :: L.NodeL a -> NodeDefinitionL a
@@ -145,29 +145,29 @@ servingMsg port handlersF = liftF $ ServingTcp port handlersF id
 
 
 instance L.Logger NodeDefinitionL where
-    logMessage level = evalCoreEffectNodeDefinitionF . L.logMessage level
+    logMessage level msg = evalCoreEffectNodeDefinitionF (L.logMessage level msg)
 
-instance L.ERandom NodeDefinitionL where
-    evalCoreCrypto      = evalCoreEffectNodeDefinitionF . L.evalCoreCrypto
-    getRandomInt        = evalCoreEffectNodeDefinitionF . L.getRandomInt
-    getRandomByteString = evalCoreEffectNodeDefinitionF . L.getRandomByteString
-    nextUUID            = evalCoreEffectNodeDefinitionF   L.nextUUID
-
-instance L.FileSystem NodeDefinitionL where
-    readFile filename       = evalCoreEffectNodeDefinitionF $ L.readFile filename
-    writeFile filename text = evalCoreEffectNodeDefinitionF $ L.writeFile filename text
-    getHomeDirectory        = evalCoreEffectNodeDefinitionF   L.getHomeDirectory
-    createFilePath filepath = evalCoreEffectNodeDefinitionF $ L.createFilePath filepath
-
-instance L.ControlFlow NodeDefinitionL where
-    delay = evalCoreEffectNodeDefinitionF . L.delay
-
+-- instance L.ERandom NodeDefinitionL where
+--     evalCoreCrypto      = evalCoreEffectNodeDefinitionF . L.evalCoreCrypto
+--     getRandomInt        = evalCoreEffectNodeDefinitionF . L.getRandomInt
+--     getRandomByteString = evalCoreEffectNodeDefinitionF . L.getRandomByteString
+--     nextUUID            = evalCoreEffectNodeDefinitionF   L.nextUUID
+--
+-- instance L.FileSystem NodeDefinitionL where
+--     readFile filename       = evalCoreEffectNodeDefinitionF $ L.readFile filename
+--     writeFile filename text = evalCoreEffectNodeDefinitionF $ L.writeFile filename text
+--     getHomeDirectory        = evalCoreEffectNodeDefinitionF   L.getHomeDirectory
+--     createFilePath filepath = evalCoreEffectNodeDefinitionF $ L.createFilePath filepath
+--
+-- instance L.ControlFlow NodeDefinitionL where
+--     delay = evalCoreEffectNodeDefinitionF . L.delay
+--
 instance L.StateIO NodeDefinitionL where
-    atomically     = scenario . L.atomically
-    newVarIO       = scenario . L.newVarIO
-    readVarIO      = scenario . L.readVarIO
-    writeVarIO var = scenario . L.writeVarIO var
+    atomically     v = scenario (L.atomically v)
+    newVarIO       v = scenario (L.newVarIO v)
+    readVarIO      v = scenario (L.readVarIO v)
+    writeVarIO var v = scenario (L.writeVarIO var v)
 
-instance L.Time NodeDefinitionL where
-    getUTCTime   = evalCoreEffectNodeDefinitionF L.getUTCTime
-    getPosixTime = evalCoreEffectNodeDefinitionF L.getPosixTime
+-- instance L.Time NodeDefinitionL where
+--     getUTCTime   = evalCoreEffectNodeDefinitionF L.getUTCTime
+--     getPosixTime = evalCoreEffectNodeDefinitionF L.getPosixTime

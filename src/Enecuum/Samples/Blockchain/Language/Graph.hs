@@ -20,7 +20,7 @@ type KNode = (D.KBlock, D.GraphNode)
 data FindingBlockPredicate = FindByNumber D.BlockNumber
 
 -- | Get kBlock & node by Hash.
-getKBlockNode :: D.WindowedGraph -> D.StringHash -> L.StateL (Maybe KNode)
+getKBlockNode :: (L.State' m) => D.WindowedGraph -> D.StringHash -> m (Maybe KNode)
 getKBlockNode wndGraph hash = L.evalGraph (D._graph wndGraph) $ do
     mbNode <- L.getNode hash
     case mbNode of
@@ -28,10 +28,10 @@ getKBlockNode wndGraph hash = L.evalGraph (D._graph wndGraph) $ do
         _                                                                     -> pure Nothing
 
 -- | Get kBlock by Hash.
-getKBlock :: D.WindowedGraph -> D.StringHash -> L.StateL (Maybe D.KBlock)
+getKBlock :: (L.State' m) => D.WindowedGraph -> D.StringHash -> m (Maybe D.KBlock)
 getKBlock wndGraph hash = fst <<$>> getKBlockNode wndGraph hash
 
-findKBlockNode :: D.WindowedGraph -> [D.StringHash] -> L.StateL (Maybe KNode)
+findKBlockNode :: (L.State' m) => D.WindowedGraph -> [D.StringHash] -> m (Maybe KNode)
 findKBlockNode _ [] = pure Nothing
 findKBlockNode wndGraph (rLink : rLinks) = getKBlockNode wndGraph rLink >>= \case
     Nothing    -> findKBlockNode wndGraph rLinks
@@ -40,10 +40,11 @@ findKBlockNode wndGraph (rLink : rLinks) = getKBlockNode wndGraph rLink >>= \cas
 -- | Find a KBlock by the given predicate starting from top and traversing graph down to genesis.
 -- Returns KBlock & node.
 findKBlockNodeDownward'
-    :: D.WindowedGraph
+    :: (L.State' m)
+    => D.WindowedGraph
     -> FindingBlockPredicate
     -> Maybe KNode
-    -> L.StateL (Maybe KNode)
+    -> m (Maybe KNode)
 findKBlockNodeDownward' wndGraph predicate@(FindByNumber targetNumber) Nothing = pure Nothing
 findKBlockNodeDownward' wndGraph predicate@(FindByNumber targetNumber) (Just current) = do
     let (currentKBlock, currentNode) = current
@@ -57,16 +58,18 @@ findKBlockNodeDownward' wndGraph predicate@(FindByNumber targetNumber) (Just cur
 -- | Find a KBlock by the given predicate starting from top and traversing graph down to genesis.
 -- Returns KBlock & node.
 findKBlockNodeDownward
-    :: D.WindowedGraph
+    :: (L.State' m)
+    => D.WindowedGraph
     -> FindingBlockPredicate
     -> D.StringHash
-    -> L.StateL (Maybe KNode)
+    -> m (Maybe KNode)
 findKBlockNodeDownward wndGraph predicate kBlockHash = do
     mbNode <- getKBlockNode wndGraph kBlockHash
     findKBlockNodeDownward' wndGraph predicate mbNode
 
 -- | Returns all nodes and links that pointing to this node.
-getPredecessors :: D.WindowedGraph -> D.GraphNode -> L.StateL ([D.GraphNode], [D.StringHash])
+getPredecessors :: (L.State' m)
+  => D.WindowedGraph -> D.GraphNode -> m ([D.GraphNode], [D.StringHash])
 getPredecessors wndGraph node = do
     let (D.HNode _ _ _ _ (D.hashLinks -> rLinks)) = node
     predNodes <- L.evalGraph (D._graph wndGraph) $ catMaybes <$> mapM L.getNode rLinks
@@ -76,7 +79,8 @@ getPredecessors wndGraph node = do
 -- Takes a top block and goes down.
 -- TODO: WindowedGraph support
 -- TODO: merge with findBlockDownward
-findBlocksByNumber :: D.WindowedGraph -> D.BlockNumber -> D.KBlock -> L.StateL [D.KBlock]
+findBlocksByNumber :: (L.State' m)
+  => D.WindowedGraph -> D.BlockNumber -> D.KBlock -> m [D.KBlock]
 findBlocksByNumber wndGraph num currentKBlock = do
     let cNum = D._number currentKBlock
     if  | cNum <  num -> pure []
@@ -89,19 +93,22 @@ findBlocksByNumber wndGraph num currentKBlock = do
 
 -- | Get Top kBlock.
 -- N.B. It assumes the topKBlock hash will always point to the existing KBlock in graph.
-getTopKBlock :: D.WindowedGraph -> L.StateL D.KBlock
+getTopKBlock :: (L.State' m)
+  => D.WindowedGraph -> m D.KBlock
 getTopKBlock wndGraph = do
     topNodeHash <- L.readVar (wndGraph ^. Lens.topKBlockHash)
     fromJust <$> getKBlock wndGraph topNodeHash
 
-getMBlocksForKBlock :: D.WindowedGraph -> D.StringHash -> L.StateL (Either Text [D.Microblock])
+getMBlocksForKBlock :: (L.State' m)
+  => D.WindowedGraph -> D.StringHash -> m (Either Text [D.Microblock])
 getMBlocksForKBlock wndGraph hash =  L.evalGraph (D._graph wndGraph) $ do
     mbNode <- L.getNode hash
     case mbNode of
         Nothing   -> pure $ Left "KBlock doesn't exist"
         Just node -> Right <$> getMBlocksForKBlock'' node
 
-getMBlocksForKBlock' :: D.WindowedGraph -> D.StringHash -> L.StateL [D.Microblock]
+getMBlocksForKBlock' :: (L.State' m)
+  => D.WindowedGraph -> D.StringHash -> m [D.Microblock]
 getMBlocksForKBlock' wndGraph hash =  L.evalGraph (D._graph wndGraph) $ do
     mbNode <- L.getNode hash
     case mbNode of
@@ -136,7 +143,8 @@ getKNodeHash (_, node) = node ^. Lens.hash
 
 -- | Add key block to the top of the graph.
 -- kBlockSrc is where the KBlock came from. For example, Network or Pending.
-addTopKBlock :: Text -> D.BlockchainData -> D.KBlock -> L.StateL Bool
+addTopKBlock :: (L.State' m)
+  => Text -> D.BlockchainData -> D.KBlock -> m Bool
 addTopKBlock kBlockSrc bData kBlock = do
     L.logInfo $ "Adding " +| kBlockSrc |+ " KBlock to the graph: " +|| kBlock ||+ "."
     let kBlock' = D.KBlockContent kBlock
@@ -153,7 +161,8 @@ addTopKBlock kBlockSrc bData kBlock = do
     pure True
 
 -- | Add microblock to graph
-addMBlock :: D.WindowedGraph -> D.Microblock -> L.StateL Bool
+addMBlock :: (L.State' m)
+  => D.WindowedGraph -> D.Microblock -> m Bool
 addMBlock wndGraph mblock@(D.Microblock hash _ _ _) = do
     kblock <- getKBlock wndGraph hash
 
@@ -166,7 +175,8 @@ addMBlock wndGraph mblock@(D.Microblock hash _ _ _) = do
             L.newLink hash (D.MBlockContent mblock)
     pure $ isJust kblock
 
-shrinkGraphDownFrom :: D.WindowedGraph -> D.GraphNode -> L.StateL ()
+shrinkGraphDownFrom :: (L.State' m)
+  => D.WindowedGraph -> D.GraphNode -> m ()
 shrinkGraphDownFrom wndGraph node = do
     (nodes, rLinks) <- getPredecessors wndGraph node
     L.evalGraph (D._graph wndGraph) $

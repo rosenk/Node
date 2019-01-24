@@ -105,7 +105,7 @@ getNodeId = do
 -- | Create key pair by system or by user
 createKey :: CreatedBy -> L.NodeL AppKeyPair
 createKey createdBy = do
-    D.KeyPair publicKey privateKey <- L.evalCoreCrypto L.generateKeyPair
+    D.KeyPair publicKey privateKey <- L.generateKeyPair
     let publicKeyS = fromString $ D.showPublicKey publicKey
     let privateKeyS = fromString $ D.showPrivateKey privateKey
     case createdBy of
@@ -118,7 +118,7 @@ createKey createdBy = do
         User source -> do
             let password = getPassword source
             L.logInfo $ "Your can access to private key via password: " +|| password ||+ ""
-            encryptedPrivateKey <- L.evalCoreCrypto $ encryptKey password privateKeyS
+            encryptedPrivateKey <- encryptKey password privateKeyS
             pure $ ManualGen $ ManualAppKeyPair
                     { _publicKey  = publicKeyS
                     , _privateKey = encryptedPrivateKey

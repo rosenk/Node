@@ -18,7 +18,7 @@ import           Enecuum.Prelude
 newWalletAmount :: D.Amount
 newWalletAmount = 100
 
-initializeWallet :: D.StateVar D.Ledger -> D.WalletID -> L.StateL ()
+initializeWallet :: (L.State' m, L.Logger m) => D.StateVar D.Ledger -> D.WalletID -> m ()
 initializeWallet ledgerVar wallet = do
     ledgerW <- L.readVar ledgerVar
     unless (Map.member wallet ledgerW) $ L.modifyVar ledgerVar (Map.insert wallet newWalletAmount)
@@ -28,7 +28,7 @@ getBalanceOrCrash wallet ledger = fromMaybe
     (error $ "Impossible: wallet " +|| wallet ||+ " is not initialized.")
     (ledger ^. at wallet)
 
-calculateLedger :: BlockchainData -> Microblock -> L.StateL ()
+calculateLedger :: (L.State' m, L.Logger m) => BlockchainData -> Microblock -> m ()
 calculateLedger bData mblock =
 
     forM_ (_transactions mblock) $ \tx -> do
