@@ -15,24 +15,8 @@ type Key = ByteString
 type Msg = ByteString
 type CipheredMsg = ByteString
 
--- | Language for Cryptography.
-data CryptoF next where
-    GenerateKeyPair :: (KeyPair -> next) -> CryptoF next
-    Sign :: (Serialize msg) => PrivateKey -> msg -> (Signature -> next) -> CryptoF next
-    Encrypt :: Key -> Msg -> (CipheredMsg -> next) -> CryptoF next
-    Decrypt :: Key -> CipheredMsg -> (Maybe Msg -> next) -> CryptoF next
-makeFunctorInstance ''CryptoF
-
-type CryptoL next = Free CryptoF next
-
 class Crypto m where
     generateKeyPair :: m KeyPair
     sign :: (Serialize msg) => PrivateKey -> msg -> m Signature
     encrypt :: Key -> Msg -> m CipheredMsg
     decrypt :: Key -> CipheredMsg -> m (Maybe Msg)
-
-instance Crypto (Free CryptoF) where
-    generateKeyPair = liftF $ GenerateKeyPair id
-    sign key msg    = liftF $ Sign key msg id
-    encrypt key msg = liftF $ Encrypt key msg id
-    decrypt key secretMsg = liftF $ Decrypt key secretMsg id

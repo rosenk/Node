@@ -17,6 +17,8 @@ import           Data.HGraph.StringHashable (StringHash (..), toHash)
 import           Enecuum.Core.HGraph.Interpreters.STM
 import           Enecuum.Core.State.DelayedLogger (runDelayedLoggerL)
 
+import           Control.Monad.Trans.Reader (ReaderT, ask)
+
 getVarNumber :: Rt.StateRuntime -> STM Rt.VarNumber
 getVarNumber stateRt = do
     number <- Rt.getNextId stateRt
@@ -46,25 +48,22 @@ writeVar' stateRt (D.StateVar varId) val = do
         Just (Rt.VarHandle _ tvar) -> writeTVar tvar $ unsafeCoerce val
 
 
--- | Interpret StateL as STM.
-interpretStateL :: Rt.StateRuntime -> L.StateF a -> STM a
+instance L.State' (ReaderT Rt.StateRuntime STM) where
+    newVarIO val = do
+        stateRt <- ask
+        D.StateVar <$> newVar' stateRt val
+    readVarIO var = do
+        stateRt <- ask
+        readVar' stateRt var
+    writeVarIO var val = do
+        stateRt <- ask
+        writeVar' stateRt var val
+    retry = retry
+    -- EvalGraph :: (Serialize c, D.StringHashable c) => D.TGraph c -> Free (L.HGraphF (D.TNodeL c)) x -> (x -> next) -> StateF next
+    -- EvalDelayedLogger :: L.LoggerL () -> (() -> next) -> StateF next
 
-interpretStateL stateRt (L.NewVar  val next     ) = next . D.StateVar <$> newVar' stateRt val
-
-interpretStateL stateRt (L.ReadVar var next     ) = next <$> readVar' stateRt var
-
-interpretStateL stateRt (L.WriteVar var val next) = next <$> writeVar' stateRt var val
-
-interpretStateL _       (L.Retry _              ) = retry
-
-interpretStateL _       (L.EvalGraph gr act next) = next <$> runHGraphSTM gr act
-
-interpretStateL stateRt (L.EvalDelayedLogger act next) = next <$> runDelayedLoggerL (stateRt ^. RLens.delayedLog) act
-
--- | Runs state model as STM.
-runStateL :: Rt.StateRuntime -> L.StateL a -> STM a
-runStateL stateRt = foldFree (interpretStateL stateRt)
-
+-- interpretStateL _       (L.EvalGraph gr act next) = next <$> runHGraphSTM gr act
+-- interpretStateL stateRt (L.EvalDelayedLogger act next) = next <$> runDelayedLoggerL (stateRt ^. RLens.delayedLog) act
 
 -- | Writes all delayed entries into real logger.
 flushDelayedLogger :: Rt.StateRuntime -> Rt.LoggerRuntime -> IO ()

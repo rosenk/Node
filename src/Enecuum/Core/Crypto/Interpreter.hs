@@ -9,21 +9,12 @@ import           Enecuum.Core.Crypto.Crypto
 import qualified Enecuum.Core.Language      as L
 import           Enecuum.Prelude
 
-interpretCryptoL :: L.CryptoF a -> IO a
-interpretCryptoL (L.GenerateKeyPair next) =
-    next <$> generateNewRandomAnonymousKeyPair
-interpretCryptoL (L.Sign key msg next) = do
-    signature <- sign key msg
-    pure $ next signature
-interpretCryptoL (L.Encrypt key msg next) = do
-    encryptedMsg <- encryptIO key msg
-    pure $ next encryptedMsg
-interpretCryptoL (L.Decrypt key encryptedMsg next) = do
-    eDecryptedMsg :: Either SomeException L.Key <- try $ decryptIO key encryptedMsg
-    let decryptedMsg = case eDecryptedMsg of
+instance L.Crypto IO where
+    generateKeyPair = generateNewRandomAnonymousKeyPair
+    sign key msg = sign key msg
+    encrypt key msg = encryptIO key msg
+    decrypt key encryptedMsg = do
+      eDecryptedMsg :: Either SomeException L.Key <- try $ decryptIO key encryptedMsg
+      pure $ case eDecryptedMsg of
             Left e -> Nothing
             Right decryptedMsg -> Just decryptedMsg
-    pure $ next decryptedMsg
-
-runCryptoL :: L.CryptoL a -> IO a
-runCryptoL = foldFree interpretCryptoL

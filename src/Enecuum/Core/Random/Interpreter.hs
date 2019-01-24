@@ -7,26 +7,14 @@ import           System.Random                    hiding (next)
 import qualified Enecuum.Core.Crypto.Interpreter as I
 import           Data.UUID.V1 (nextUUID)
 
--- | Interpret RandomL language.
-interpretERandomL :: L.ERandomF a -> IO a
-interpretERandomL (L.EvalCoreCrypto a next) = do
-    r <- I.runCryptoL a
-    pure $ next r
-interpretERandomL (L.GetRandomInt k next) = do
-    r <- randomRIO k
-    pure $ next r
-interpretERandomL (L.GetRandomByteString k next) = do
-    r<- getEntropy k
-    pure $ next r
-interpretERandomL (L.NextUUID next) = do
-    r <- fromJust <$> nextUUID 
-    pure $ next r
 
-runERandomL :: L.ERandomL a -> IO a
-runERandomL = foldFree interpretERandomL
+instance L.ERandom IO where
+    -- evalCoreCrypto      :: CryptoL a -> m a  -- ??
+    getRandomInt        = andomRIO
+    getRandomByteString = getEntropy
+    nextUUID            = fromJust <$> nextUUID
 
 
-
-
-
-
+-- interpretERandomL (L.EvalCoreCrypto a next) = do
+--     r <- I.runCryptoL a
+--     pure $ next r

@@ -12,6 +12,8 @@ import           System.Log.Logger
 import qualified Enecuum.Core.Language       as L
 import qualified Enecuum.Core.Types          as T (LogLevel (..), LoggerConfig(..))
 
+import           Control.Monad.Trans.Reader (ReaderT, ask)
+
 -- | Opaque type covering all information needed to teardown the logger.
 data HsLoggerHandle = HsLoggerHandle
   { handlers :: [GenericHandler Handle]
@@ -24,7 +26,7 @@ component = ""
 -- the application are needed to installed. Sets them up before running the action
 -- and tears them down afterwards. Even in case of an exception.
 withLogger :: T.LoggerConfig -> (HsLoggerHandle -> IO c) -> IO c
-withLogger config = bracket (setupLogger config) teardownLogger 
+withLogger config = bracket (setupLogger config) teardownLogger
 
 -- | Dispatch log level from the LoggerL language
 -- to the relevant log level of hslogger package
@@ -34,15 +36,14 @@ dispatchLogLevel T.Info    = INFO
 dispatchLogLevel T.Warning = WARNING
 dispatchLogLevel T.Error   = ERROR
 
--- | Interpret LoggerL language.
-interpretLoggerL :: HsLoggerHandle -> L.LoggerF a -> IO a
-interpretLoggerL _ (L.LogMessage level msg next) = do
-    logM component (dispatchLogLevel level) $ TXT.unpack msg
-    pure $ next ()
+instance L.Logger (ReaderT HsLoggerHandle IO) where
+    logMessage level msg =
+        logM component (dispatchLogLevel level) $ TXT.unpack msg
 
-runLoggerL :: Maybe HsLoggerHandle -> L.LoggerL () -> IO ()
-runLoggerL (Just h) l = foldFree (interpretLoggerL h) l
-runLoggerL Nothing  _ = pure ()
+
+-- runLoggerL :: Maybe HsLoggerHandle -> L.LoggerL () -> IO ()
+-- runLoggerL (Just h) l = foldFree (interpretLoggerL h) l
+-- runLoggerL Nothing  _ = pure ()
 
 -- | Setup logger required by the application.
 setupLogger :: T.LoggerConfig -> IO HsLoggerHandle
@@ -65,4 +66,3 @@ teardownLogger (HsLoggerHandle handlers) = do
     let x = setHandlers @(GenericHandler Handle) []
     updateGlobalLogger rootLoggerName (setLevel EMERGENCY . x)
     mapM_ close handlers
-

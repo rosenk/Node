@@ -5,29 +5,15 @@ import qualified Enecuum.Core.Language as L
 import           Enecuum.Prelude
 import           System.Directory      (createDirectoryIfMissing, doesFileExist, getHomeDirectory)
 import           System.FilePath.Posix (splitFileName)
--- import           System.FilePath  ((</>))
 
--- | Interpret CryptoL language.
-interpretFileSystemL :: L.FileSystemF a -> IO a
-interpretFileSystemL (L.ReadFile filename next) = do
-    text <- B.readFile filename
-    pure $ next $ text
-interpretFileSystemL (L.WriteFile filename text next) = do
-    B.writeFile filename text
-    pure $ next ()
-interpretFileSystemL (L.AppendFile filename text next) = do
-    B.appendFile filename text
-    pure $ next ()
-interpretFileSystemL (L.GetHomeDirectory next) = do
-    filename <- getHomeDirectory
-    pure $ next filename
-interpretFileSystemL (L.CreateFilePath filepath next) = do
-    let (dir, filename) = splitFileName filepath
-    createDirectoryIfMissing True dir
-    pure $ next filepath
-interpretFileSystemL (L.DoesFileExist filepath next) = do
-    isFileExist <- doesFileExist filepath
-    pure $ next isFileExist
 
-runFileSystemL :: L.FileSystemL a -> IO a
-runFileSystemL = foldFree interpretFileSystemL
+instance L.FileSystem IO where
+    readFile = B.readFile
+    writeFile filename text = B.writeFile filename text
+    appendFile filename text = B.appendFile filename text
+    getHomeDirectory = getHomeDirectory
+    createFilePath filepath = do
+        let (dir, filename) = splitFileName filepath
+        createDirectoryIfMissing True dir
+        pure $ next filepath
+    doesFileExist = doesFileExist

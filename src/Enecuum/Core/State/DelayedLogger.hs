@@ -5,12 +5,9 @@ import           Enecuum.Prelude
 import qualified Enecuum.Core.Language       as L
 import qualified Enecuum.Core.Runtime        as Rt
 
+import           Control.Monad.Trans.Reader (ReaderT, ask)
 
--- | Interpret LoggerL language for a delayed log.
-interpretDelayedLoggerF :: TVar Rt.DelayedLog -> L.LoggerF a -> STM a
-interpretDelayedLoggerF delayedLog (L.LogMessage level msg next) =
-    next <$> modifyTVar delayedLog (Rt.DelayedLogEntry level msg :)
-
--- | Interpret LoggerL language for a delayed log.
-runDelayedLoggerL :: TVar Rt.DelayedLog -> L.LoggerL () -> STM ()
-runDelayedLoggerL delayedLog = foldFree (interpretDelayedLoggerF delayedLog)
+instance L.Logger (ReaderT TVar Rt.DelayedLog STM) where
+    logMessage level msg = do
+        delayedLog <- ask
+        modifyTVar delayedLog (Rt.DelayedLogEntry level msg :)
