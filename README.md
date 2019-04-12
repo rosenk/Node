@@ -1,8 +1,15 @@
-# Enecuum Node Framework
+# Haskell Node Framework
 
-[![buddy pipeline](https://buddy.enecuum.com/enecuum/node/pipelines/pipeline/19/badge.svg?token=c35be458f2d393a30001acf59f086401a00713eb057ab070050e9855280788bf "buddy pipeline")](https://buddy.enecuum.com/enecuum/node/pipelines/pipeline/19)
+### Note from Alexander Granin, architector and main contributor
 
-Enecuum Node Framework allows to build network actors and blockchain protocols, console applications, work with KV database and cryptography. Current features include:
+https://github.com/graninas/ is the main repository of the project (Enecuum does not support it anymore).
+The framework is in the frozen state but it can be resumed once you'll need it and we're agree on the form of maintainance.
+
+I also will rename it into Haskell Node Framework.
+
+### Intro
+
+Haskell Node Framework allows to build network actors and blockchain protocols, console applications, work with KV database and cryptography. Current features include:
 
   - Framework to build stateful multithreaded applications
   - Config management tools
@@ -20,7 +27,7 @@ Enecuum Node Framework allows to build network actors and blockchain protocols, 
 
 The Node project contains:
 
-  - Enecuum Node Framework
+  - Haskell Node Framework
   - Sample nodes with configs
   - Testing environment
   - Tests (functional, integration)
@@ -70,7 +77,7 @@ The framework represents a set of embedded monadic languages organized hierarchi
 
 1. Clone repo:
 
-`git clone https://github.com/Enecuum/Node.git && cd Node`
+`git clone git@github.com:graninas/Node.git && cd Node`
 
 2. Build & install
 
