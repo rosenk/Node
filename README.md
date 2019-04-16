@@ -2,7 +2,7 @@
 
 ### Note from Alexander Granin, architector and main contributor
 
-https://github.com/graninas/ is the main repository of the project (Enecuum does not support it anymore).
+https://github.com/graninas/Node is the main repository of the project (Enecuum does not support it anymore).
 The framework is in the frozen state but it can be resumed once you'll need it and we're agree on the form of maintainance.
 
 I also will rename it into Haskell Node Framework.
