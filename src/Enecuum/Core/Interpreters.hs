@@ -2,7 +2,6 @@ module Enecuum.Core.Interpreters
   ( module X
   ) where
 
-import           Enecuum.Core.CoreEffect.Interpreter  as X
 import           Enecuum.Core.Crypto.Interpreter      as X
 import           Enecuum.Core.Database.Interpreter    as X
 import           Enecuum.Core.FileSystem.Interpreter  as X

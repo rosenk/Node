@@ -15,7 +15,7 @@ type Key = ByteString
 type Msg = ByteString
 type CipheredMsg = ByteString
 
-class Crypto m where
+class Monad m => Crypto m where
     generateKeyPair :: m KeyPair
     sign :: (Serialize msg) => PrivateKey -> msg -> m Signature
     encrypt :: Key -> Msg -> m CipheredMsg

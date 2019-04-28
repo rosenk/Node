@@ -1,13 +1,14 @@
 module Enecuum.Core.Runtime where
 
-import Enecuum.Prelude
+import           Enecuum.Prelude
 
-import qualified Enecuum.Core.Types                as D
-import qualified Enecuum.Core.Language             as L
-import qualified Data.Map                          as Map
-import qualified Data.ByteString.Base64            as Base64
+import           Control.Monad.Trans.Reader        (ReaderT, runReaderT)
 import qualified Crypto.Hash.SHA256                as SHA
+import qualified Data.ByteString.Base64            as Base64
+import qualified Data.Map                          as Map
+import qualified Enecuum.Core.Language             as L
 import qualified Enecuum.Core.Logger.Impl.HsLogger as Impl
+import qualified Enecuum.Core.Types                as D
 
 -- | Runtime data for the concrete logger impl.
 newtype LoggerRuntime = LoggerRuntime
@@ -66,8 +67,11 @@ clearCoreRuntime :: CoreRuntime -> IO ()
 clearCoreRuntime _ = pure ()
 
 mkRuntimeLogger :: LoggerRuntime -> RuntimeLogger
-mkRuntimeLogger (LoggerRuntime hsLog) = RuntimeLogger
-    { logMessage' = \lvl msg -> Impl.runLoggerL hsLog $ L.logMessage lvl msg
+mkRuntimeLogger (LoggerRuntime (Just hsLog)) = RuntimeLogger
+    { logMessage' = \lvl msg -> runReaderT (L.logMessage lvl msg) hsLog
+    }
+mkRuntimeLogger (LoggerRuntime Nothing) = RuntimeLogger
+    { logMessage' = \_ _ -> pure ()
     }
 
 -- Runtime log functions

@@ -40,7 +40,7 @@ data NodeF next where
     InitDatabase :: D.DBConfig db -> (D.DBResult (D.Storage db) -> next) -> NodeF next
 
     -- | Eval database.
-    EvalDatabase :: D.Storage db -> (forall m. L.Database m => m a) -> (a -> next) -> NodeF next
+    EvalDatabase :: D.Storage db -> L.DatabaseL db a -> (a -> next) -> NodeF next
 
 type NodeL = Free NodeF
 
@@ -64,11 +64,11 @@ initDatabase :: D.DBConfig db -> NodeL (D.DBResult (D.Storage db))
 initDatabase config = liftF $ InitDatabase config id
 
 -- | Eval database.
-evalDatabase :: D.Storage db -> (forall m. L.Database m => m a) -> NodeL a
-evalDatabase dbStorage db = liftF $ EvalDatabase dbStorage db id
+evalDatabase :: D.Storage db -> L.DatabaseL db a -> NodeL a
+evalDatabase db script = liftF $ EvalDatabase db script id
 
 -- | Eval database.
-withDatabase :: D.Storage db -> (forall m. L.Database m => m a) -> NodeL a
+withDatabase :: D.Storage db -> L.DatabaseL db a -> NodeL a
 withDatabase = evalDatabase
 
 withConnection

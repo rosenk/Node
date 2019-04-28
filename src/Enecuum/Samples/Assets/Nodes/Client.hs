@@ -121,7 +121,10 @@ getWalletBalance (GetWalletBalance walletId address) = do
         fun (M.WalletBalanceMsg _ balance) = "" +|| name ||+ " : " +|| balance ||+ ""
     pure $ eitherToText2 $ fmap fun res
 
-transform :: (L.ERandom m, L.Logger m, L.FileSystem m, Monad m) => CLITransaction -> m D.Transaction
+transform
+    :: (L.ERandom m, L.Logger m, L.FileSystem m, L.Crypto m, Monad m)
+    => CLITransaction
+    -> m D.Transaction
 transform tx = do
     let walletsMap = Map.fromList $ fmap (\w -> (A._name (w :: A.CLIWallet), w))  A.hardcodedWalletsWithNames
     let ownerName  = _owner tx

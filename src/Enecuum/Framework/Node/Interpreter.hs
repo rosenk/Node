@@ -6,6 +6,7 @@ module Enecuum.Framework.Node.Interpreter where
 import qualified "rocksdb-haskell" Database.RocksDB               as Rocks
 import           Enecuum.Prelude
 
+import           Control.Monad.Trans.Reader                       (ReaderT, runReaderT)
 import qualified Data.Map                                         as M
 import           Enecuum.Core.HGraph.Internal.Impl
 import           Enecuum.Core.HGraph.Interpreters.IO
@@ -36,7 +37,7 @@ interpretNodeL :: NodeRuntime -> L.NodeF a -> IO a
 interpretNodeL nodeRt (L.EvalStateAtomically statefulAction next) = do
     let stateRt  = nodeRt ^. RLens.coreRuntime . RLens.stateRuntime
     let loggerRt = nodeRt ^. RLens.coreRuntime . RLens.loggerRuntime
-    res <- atomically $ Impl.runStateL stateRt statefulAction
+    res <- atomically $ runReaderT statefulAction stateRt
     Impl.flushDelayedLogger stateRt loggerRt
     pure $ next res
 
@@ -44,7 +45,7 @@ interpretNodeL _      (L.EvalGraphIO gr act next       ) = next <$> runHGraphIO 
 
 interpretNodeL nodeRt (L.EvalNetworking networking next) = next <$> Impl.runNetworkingL nodeRt networking
 
-interpretNodeL nodeRt (L.EvalCoreEffect coreEffects next) =
+interpretNodeL nodeRt (L.EvalCoreEffect coreEffects next) = do
     next <$> Impl.runCoreEffectL (nodeRt ^. RLens.coreRuntime) coreEffects
 
 interpretNodeL nodeRt (L.OpenTcpConnection serverAddr handlersScript next) =

@@ -11,6 +11,7 @@ import qualified Enecuum.Core.Runtime                                 as R
 import qualified Enecuum.Domain                                       as D
 import           Enecuum.Framework.Networking.Internal.Client
 import qualified Enecuum.Framework.Networking.Internal.Connection     as Conn
+import           Enecuum.Framework.Networking.Internal.Datagram
 import qualified Enecuum.Framework.Networking.Internal.Tcp.Connection as Tcp ()
 import qualified Enecuum.Framework.Networking.Internal.Udp.Connection as Udp
 import qualified Enecuum.Framework.RLens                              as RLens
@@ -18,7 +19,6 @@ import           Enecuum.Framework.Runtime
 import qualified Enecuum.Language                                     as L
 import qualified Network.Socket                                       as S hiding (recv, send)
 import qualified Network.Socket.ByteString.Lazy                       as S
-import           Enecuum.Framework.Networking.Internal.Datagram
 
 
 deleteConnection :: (Ord k,
@@ -49,6 +49,7 @@ interpretNetworkingL _ (L.SendRpcRequest (D.Address host port) request next) =
     ) (pure . Left . show)
 
 interpretNetworkingL nodeRt (L.SendTcpMsgByConnection conn msg next) = do
+    -- TODO: remove logger from here?
     let logger = R.mkRuntimeLogger $ nodeRt ^. RLens.coreRuntime . RLens.loggerRuntime
 
     m <- atomically $ readTMVar $ nodeRt ^. RLens.tcpConnects
@@ -62,6 +63,7 @@ interpretNetworkingL nodeRt (L.SendTcpMsgByConnection conn msg next) = do
             pure $ next $ Left $ D.ConnectionClosed "Connection is dead."
 
 interpretNetworkingL nodeRt (L.SendUdpMsgByConnection conn msg next) = do
+    -- TODO: remove logger from here?
     let logger = R.mkRuntimeLogger $ nodeRt ^. RLens.coreRuntime . RLens.loggerRuntime
 
     m <- atomically $ readTMVar $ nodeRt ^. RLens.udpConnects

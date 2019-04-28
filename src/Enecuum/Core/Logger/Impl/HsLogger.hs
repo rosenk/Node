@@ -2,15 +2,15 @@ module Enecuum.Core.Logger.Impl.HsLogger where
 
 import           Enecuum.Prelude
 
-import qualified Data.Text                   as TXT (unpack)
-import           System.IO                   (Handle, stdout)
+import qualified Data.Text                  as TXT (unpack)
+import           System.IO                  (Handle, stdout)
 import           System.Log.Formatter
-import           System.Log.Handler          (close, setFormatter)
-import           System.Log.Handler.Simple   (GenericHandler, fileHandler, streamHandler)
+import           System.Log.Handler         (close, setFormatter)
+import           System.Log.Handler.Simple  (GenericHandler, fileHandler, streamHandler)
 import           System.Log.Logger
 
-import qualified Enecuum.Core.Language       as L
-import qualified Enecuum.Core.Types          as T (LogLevel (..), LoggerConfig(..))
+import qualified Enecuum.Core.Language      as L
+import qualified Enecuum.Core.Types         as T (LogLevel (..), LoggerConfig (..))
 
 import           Control.Monad.Trans.Reader (ReaderT, ask)
 
@@ -38,7 +38,7 @@ dispatchLogLevel T.Error   = ERROR
 
 instance L.Logger (ReaderT HsLoggerHandle IO) where
     logMessage level msg =
-        logM component (dispatchLogLevel level) $ TXT.unpack msg
+        lift $ logM component (dispatchLogLevel level) $ TXT.unpack msg
 
 
 -- runLoggerL :: Maybe HsLoggerHandle -> L.LoggerL () -> IO ()

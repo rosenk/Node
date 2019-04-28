@@ -4,15 +4,15 @@
 
 module Enecuum.Samples.Assets.Blockchain.Generation where
 
-import           Data.HGraph.StringHashable       (StringHash (..), toHash)
-import           Data.List                        (delete)
+import           Data.HGraph.StringHashable               (StringHash (..), toHash)
+import           Data.List                                (delete)
+import qualified Enecuum.Domain                           as D
+import qualified Enecuum.Language                         as L
+import           Enecuum.Prelude                          hiding (Ordering)
 import           Enecuum.Samples.Assets.Blockchain.Wallet
 import           Enecuum.Samples.Blockchain.Domain
+import           Enecuum.Samples.Blockchain.Domain        as D
 import qualified Enecuum.Samples.Blockchain.Lens          as Lens
-import qualified Enecuum.Domain                   as D
-import qualified Enecuum.Language                 as L
-import           Enecuum.Prelude                  hiding (Ordering)
-import           Enecuum.Samples.Blockchain.Domain          as D
 
 -- | Order for key blocks
 data Ordering = InOrder | RandomOrder
@@ -29,16 +29,16 @@ kBlockInBunch = 1
 transactionsInMicroblock :: Int
 transactionsInMicroblock = 3
 
-generateNKBlocks :: (L.ERandom m) => D.BlockNumber -> m (StringHash, [KBlock])
+generateNKBlocks :: (L.ERandom m, L.Crypto m) => D.BlockNumber -> m (StringHash, [KBlock])
 generateNKBlocks = generateKBlocks genesisHash
 
 generateNKBlocksWithOrder
-  :: (L.ERandom m)
+  :: (L.ERandom m, L.Crypto m)
   => D.BlockNumber -> Ordering -> m (StringHash, [KBlock])
 generateNKBlocksWithOrder = createKBlocks genesisHash
 
 -- Generate bunch of key blocks (randomly or in order)
-createKBlocks :: (L.ERandom m) => StringHash -> D.BlockNumber -> Ordering -> m (StringHash, [KBlock])
+createKBlocks :: (L.ERandom m, L.Crypto m) => StringHash -> D.BlockNumber -> Ordering -> m (StringHash, [KBlock])
 createKBlocks prevKBlockHash from order = do
     (lastHash, kBlockBunch) <- generateKBlocks prevKBlockHash from
     kBlockIndices           <- generateIndices order
@@ -46,7 +46,7 @@ createKBlocks prevKBlockHash from order = do
     pure (lastHash, kBlocks)
 
 -- Generate bunch of key blocks (in order)
-generateKBlocks :: (L.ERandom m) => StringHash -> D.BlockNumber -> m (StringHash, [KBlock])
+generateKBlocks :: (L.ERandom m, L.Crypto m) => StringHash -> D.BlockNumber -> m (StringHash, [KBlock])
 generateKBlocks prevHash from = do
     blocks <- loopGenKBlock prevHash from (from + kBlockInBunch)
     case blocks of
@@ -54,7 +54,7 @@ generateKBlocks prevHash from = do
         _  -> pure (toHash $ last blocks, blocks)
 
 -- loop - state substitute : create new Kblock using hash of previous
-loopGenKBlock :: (L.ERandom m) => StringHash -> D.BlockNumber -> D.BlockNumber -> m [KBlock]
+loopGenKBlock :: (L.ERandom m, L.Crypto m) => StringHash -> D.BlockNumber -> D.BlockNumber -> m [KBlock]
 loopGenKBlock prevHash from to = do
     kblock <- genKBlock prevHash from
     let newPrevHash = toHash kblock
@@ -64,7 +64,7 @@ loopGenKBlock prevHash from to = do
             pure $ (kblock : rest)
         else pure []
 
-genRandKeyBlock :: (L.ERandom m) => m KBlock
+genRandKeyBlock :: (L.ERandom m, L.Crypto m) => m KBlock
 genRandKeyBlock = do
     number <- fromIntegral <$> L.getRandomInt (1,1000)
     nonce <- fromIntegral <$> L.getRandomInt (1,1000)
@@ -80,7 +80,7 @@ genRandKeyBlock = do
         , _time = time
         }
 
-genKBlock :: (L.ERandom m) => StringHash -> D.BlockNumber -> m KBlock
+genKBlock :: (L.ERandom m, L.Crypto m) => StringHash -> D.BlockNumber -> m KBlock
 genKBlock prevHash i = do
     nonce <- fromIntegral <$> L.getRandomInt (0, 1000)
     pure $ KBlock { _prevHash = prevHash
@@ -90,11 +90,11 @@ genKBlock prevHash i = do
                   , _time     = i
                   }
 
-genNTransactions :: (L.ERandom m) => Int -> m [Transaction]
+genNTransactions :: (L.ERandom m, L.Crypto m) => Int -> m [Transaction]
 genNTransactions k = replicateM k $ genTransaction Hardcoded
 
 -- | Generate signed transaction
-genTransaction :: (L.ERandom m) => WalletSource -> m Transaction
+genTransaction :: (L.ERandom m, L.Crypto m) => WalletSource -> m Transaction
 genTransaction isFromRange = do
     (ownerKeyPair, receiverKeyPair) <- case isFromRange of
         Hardcoded -> do
@@ -106,8 +106,8 @@ genTransaction isFromRange = do
             let receiver = rest !! receiverIndex
             pure (owner, receiver)
         Generated -> do
-            owner <- L.evalCoreCrypto L.generateKeyPair
-            receiver <- L.evalCoreCrypto L.generateKeyPair
+            owner    <- L.generateKeyPair
+            receiver <- L.generateKeyPair
             pure (owner, receiver)
 
     amount <- fromIntegral <$> L.getRandomInt (0, 100)
@@ -118,17 +118,17 @@ genTransaction isFromRange = do
     signTransaction owner (getPriv ownerKeyPair) receiver amount currency uuid
 
 -- | Generate signed microblock
-genMicroblock :: (L.ERandom m) => KBlock -> [Transaction] -> m Microblock
+genMicroblock :: (L.ERandom m, L.Crypto m) => KBlock -> [Transaction] -> m Microblock
 genMicroblock kBlock tx = do
     let hashofKeyBlock = toHash kBlock
-    KeyPair publisherPubKey publisherPrivKey <- L.evalCoreCrypto L.generateKeyPair
+    KeyPair publisherPubKey publisherPrivKey <- L.generateKeyPair
     signMicroblock hashofKeyBlock tx publisherPubKey publisherPrivKey
 
-genRandMicroblock :: (L.ERandom m) => KBlock -> m Microblock
+genRandMicroblock :: (L.ERandom m, L.Crypto m) => KBlock -> m Microblock
 genRandMicroblock kBlock = genMicroblock kBlock =<< genNTransactions transactionsInMicroblock
 
 -- | Generate indices with order
-generateIndices :: (L.ERandom m) => Ordering -> m [Int]
+generateIndices :: (L.ERandom m, L.Crypto m) => Ordering -> m [Int]
 generateIndices order = do
     n <- case order of
         RandomOrder -> loopGenIndices [0 .. kBlockInBunch]
@@ -143,7 +143,7 @@ generateIndices order = do
 -- [1,3] - 1
 -- [3] - 3
 -- the result: [2,4,5,1,3]
-loopGenIndices :: (L.ERandom m, Eq a) => [a] -> m [a]
+loopGenIndices :: (L.ERandom m, L.Crypto m, Eq a) => [a] -> m [a]
 loopGenIndices [] = pure []
 loopGenIndices numbers = do
     let maxIndex = length numbers - 1
@@ -154,22 +154,22 @@ loopGenIndices numbers = do
     pure (result : rest)
 
 -- | Generate bogus transaction
-generateBogusSignedTransaction :: (L.ERandom m) => m Transaction
+generateBogusSignedTransaction :: (L.ERandom m, L.Crypto m) => m Transaction
 generateBogusSignedTransaction = do
     Transaction {..} <- genTransaction Generated
     let genTxSign fakeOwnerPrivateKey = signTransaction _owner fakeOwnerPrivateKey _receiver (_amount + 100)  _currency _uuid
     generateBogusSignedSomething genTxSign
 
 -- | Generate bogus signature with function for something
-generateBogusSignedSomething :: (L.ERandom m, Lens.HasSignature s b) =>
+generateBogusSignedSomething :: (L.ERandom m, L.Crypto m, Lens.HasSignature s b) =>
     (PrivateKey -> m s) -> m s
 generateBogusSignedSomething genFunction = do
-    fakeOwner <- L.evalCoreCrypto L.generateKeyPair
+    fakeOwner <- L.generateKeyPair
     let fakeOwnerPrivateKey = getPriv fakeOwner
     genFunction fakeOwnerPrivateKey
 
 -- | Generate bogus microblock
-generateBogusSignedMicroblock :: (L.ERandom m) => KBlock -> [Transaction] -> m Microblock
+generateBogusSignedMicroblock :: (L.Crypto m, L.ERandom m) => KBlock -> [Transaction] -> m Microblock
 generateBogusSignedMicroblock kBlock tx = do
     Microblock {..} <- genMicroblock kBlock tx
     let genMbSign = signMicroblock _keyBlock _transactions _publisher

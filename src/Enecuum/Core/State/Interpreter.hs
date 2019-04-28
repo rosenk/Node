@@ -2,22 +2,21 @@
 
 module Enecuum.Core.State.Interpreter where
 
-import Enecuum.Prelude
+import           Enecuum.Prelude
 
-import qualified Data.Map             as Map
-import           Unsafe.Coerce        (unsafeCoerce)
+import qualified Data.Map                             as Map
+import           Unsafe.Coerce                        (unsafeCoerce)
 
-import qualified Enecuum.Core.Language   as L
-import qualified Enecuum.Core.Types      as D
-import qualified Enecuum.Core.Runtime    as Rt
-import qualified Enecuum.Core.RLens      as RLens
-import qualified Enecuum.Core.Logger.Impl.HsLogger as Impl
-
-import           Data.HGraph.StringHashable (StringHash (..), toHash)
+import           Data.HGraph.StringHashable           (StringHash (..), toHash)
 import           Enecuum.Core.HGraph.Interpreters.STM
-import           Enecuum.Core.State.DelayedLogger (runDelayedLoggerL)
+import qualified Enecuum.Core.Language                as L
+import qualified Enecuum.Core.Logger.Impl.HsLogger    as Impl
+import qualified Enecuum.Core.RLens                   as RLens
+import qualified Enecuum.Core.Runtime                 as Rt
+import           Enecuum.Core.State.DelayedLogger
+import qualified Enecuum.Core.Types                   as D
 
-import           Control.Monad.Trans.Reader (ReaderT, ask)
+import           Control.Monad.Trans.Reader           (ReaderT, runReaderT)
 
 getVarNumber :: Rt.StateRuntime -> STM Rt.VarNumber
 getVarNumber stateRt = do
@@ -49,21 +48,25 @@ writeVar' stateRt (D.StateVar varId) val = do
 
 
 instance L.State' (ReaderT Rt.StateRuntime STM) where
-    newVarIO val = do
+    newVar val = do
         stateRt <- ask
-        D.StateVar <$> newVar' stateRt val
-    readVarIO var = do
+        D.StateVar <$> lift (newVar' stateRt val)
+    readVar var = do
         stateRt <- ask
-        readVar' stateRt var
-    writeVarIO var val = do
+        lift $ readVar' stateRt var
+    writeVar var val = do
         stateRt <- ask
-        writeVar' stateRt var val
-    retry = retry
+        lift $ writeVar' stateRt var val
+    retry = lift retry
     -- EvalGraph :: (Serialize c, D.StringHashable c) => D.TGraph c -> Free (L.HGraphF (D.TNodeL c)) x -> (x -> next) -> StateF next
     -- EvalDelayedLogger :: L.LoggerL () -> (() -> next) -> StateF next
 
+instance L.Logger (ReaderT Rt.StateRuntime STM) where
+  logMessage lvl msg = do
+      stateRt <- ask
+      lift $ runReaderT (L.logMessage lvl msg) (stateRt ^. RLens.delayedLog)
+
 -- interpretStateL _       (L.EvalGraph gr act next) = next <$> runHGraphSTM gr act
--- interpretStateL stateRt (L.EvalDelayedLogger act next) = next <$> runDelayedLoggerL (stateRt ^. RLens.delayedLog) act
 
 -- | Writes all delayed entries into real logger.
 flushDelayedLogger :: Rt.StateRuntime -> Rt.LoggerRuntime -> IO ()
@@ -73,5 +76,5 @@ flushDelayedLogger stateRt loggerRt = do
             writeTVar (stateRt ^. RLens.delayedLog) []
             pure l
 
-    let loggerHandle = loggerRt ^. RLens.hsLoggerHandle
-    mapM_ (\(Rt.DelayedLogEntry level msg) -> Impl.runLoggerL loggerHandle $ L.logMessage level msg) l
+    let Rt.RuntimeLogger logMessage' = Rt.mkRuntimeLogger loggerRt
+    mapM_ (\(Rt.DelayedLogEntry level msg) -> logMessage' level msg) l

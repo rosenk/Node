@@ -8,12 +8,12 @@ import           System.FilePath.Posix (splitFileName)
 
 
 instance L.FileSystem IO where
-    readFile = B.readFile
-    writeFile filename text = B.writeFile filename text
-    appendFile filename text = B.appendFile filename text
+    readFile   = B.readFile
+    writeFile  = B.writeFile
+    appendFile = B.appendFile
     getHomeDirectory = getHomeDirectory
     createFilePath filepath = do
         let (dir, filename) = splitFileName filepath
         createDirectoryIfMissing True dir
-        pure $ next filepath
+        pure filepath
     doesFileExist = doesFileExist
