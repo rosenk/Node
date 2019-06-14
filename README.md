@@ -32,6 +32,8 @@ The Node project contains:
   - Testing environment
   - Tests (functional, integration)
 
+This [tutorial](https://gist.github.com/graninas/9beb8df5d88dda5fa21c47ce9bcb0e16) contains more info.
+
 ## Framework structure
 
   - Source code located in [./src/](./src/)
