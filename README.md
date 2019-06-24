@@ -1,4 +1,4 @@
-# Enecuum Node Framework
+# Node Framework
 
 ### Note from Alexander Granin, architector and main contributor
 
@@ -7,7 +7,7 @@ The framework is in the frozen state but it can be resumed once you'll need it a
 
 ### Intro
 
-Enecuum Node Framework allows to build network actors and blockchain protocols, console applications, work with KV database and cryptography. Current features include:
+Node Framework allows to build network actors and blockchain protocols, console applications, work with KV database and cryptography. Current features include:
 
   - Framework to build stateful multithreaded applications
   - Config management tools
@@ -286,7 +286,7 @@ pongClientNode cfg = do
 
 # Additional materials
 
-  * [Building network actors with Enecuum Node Framework (tutorial)](https://gist.github.com/graninas/9beb8df5d88dda5fa21c47ce9bcb0e16)
+  * [Building network actors with Node Framework (tutorial)](https://gist.github.com/graninas/9beb8df5d88dda5fa21c47ce9bcb0e16)
   * [Why Haskell?](https://medium.com/@ENQBlockchain/why-haskell-eacb087f3adb)
   * [Enecuum. Framework possibilities](https://medium.com/@ENQBlockchain/enecuum-framework-possibilities-d4fa49c3ea40)
   * [Enecuum.Framework Possibilities, Part 2](https://medium.com/@ENQBlockchain/enecuum-framework-possibilities-part-2-7c8ff65c1c4e)
